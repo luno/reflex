@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package reflexpb;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+service Reflex {
+  rpc Stream (StreamRequest) returns (stream Event) {}
+  rpc Consume (stream ConsumeRequest) returns (stream Event) {}
+}
+
+message StreamRequest {
+  int64 after_int = 1; //TODO(corver): Reserve after migration
+  StreamOptions options = 2;
+  string after = 3;
+}
+
+message ConsumeRequest {
+  string consumer_id = 1;
+  int64 ack_id_int = 2;  //TODO(corver): Reserve after migration
+  StreamOptions options = 3;
+  string ack_id = 4;
+}
+
+message Event {
+  int64 id_int = 1; //TODO(corver): Reserve after migration
+  reserved 2;
+  int32 type = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  string foreign_id = 5;
+  string id = 6;
+  bytes metadata = 7;
+}
+
+message StreamOptions {
+  google.protobuf.Duration lag = 1;
+  bool fromHead = 2;
+  reserved 3;
+}
