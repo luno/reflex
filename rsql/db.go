@@ -266,7 +266,7 @@ func setCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema,
 	}
 
 	res, err := dbc.ExecContext(ctx, "update "+schema.name+
-		" set "+schema.cursorField+"=?, updated_at=now() where "+schema.idField+"=?"+
+		" set "+schema.cursorField+"=?, "+schema.timefield+"=now() where "+schema.idField+"=?"+
 		" and "+schema.cursorField+"<?",
 		c, id, c)
 	if err != nil {
@@ -284,7 +284,7 @@ func setCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema,
 
 	// Insert since rows == 0
 	_, err = dbc.ExecContext(ctx, "insert into "+schema.name+" set "+schema.idField+"=?, "+
-		schema.cursorField+"=?, updated_at=now()", id, c)
+		schema.cursorField+"=?, "+schema.timefield+"=now()", id, c)
 	if isMySQLErrDupEntry(err) {
 		return errors.Wrap(err, "attempted to set cursor <= existing cursor", opts...)
 	} else if err != nil {

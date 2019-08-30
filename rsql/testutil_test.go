@@ -108,3 +108,18 @@ func TestCustomCursorIDField(t *testing.T) {
 	rsql.TestCursorsTable(t, dbc, rsql.NewCursorsTable(cursorsTable,
 		rsql.WithCursorIDField(cursorsIDField)))
 }
+
+func TestCustomCursorTimeField(t *testing.T) {
+	cache := cursorsTimeField
+	defer func() {
+		cursorsTimeField = cache
+	}()
+
+	cursorsTimeField = "timestamp"
+
+	dbc := ConnectTestDB(t, "", cursorsTable)
+	defer dbc.Close()
+
+	rsql.TestCursorsTable(t, dbc, rsql.NewCursorsTable(cursorsTable,
+		rsql.WithCursorTimeField(cursorsTimeField)))
+}

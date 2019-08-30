@@ -26,6 +26,7 @@ var (
 	cursorsCursorField       = "last_event_id"
 	cursorsCursorType        = "bigint"
 	cursorsIDField           = "id"
+	cursorsTimeField         = "updated_at"
 	isEventForeignIDInt      = false
 	eventForeignIDFieldTypes = map[bool]string{
 		false: "varchar(255)",
@@ -53,7 +54,7 @@ const cursorsSchema = `
 create %s table %s (
   %s varchar(255) not null,
   %s %s not null,
-  updated_at datetime not null,
+  %s datetime not null,
 
   primary key (%s)
 );
@@ -133,7 +134,7 @@ func createCursorsTable(t *testing.T, dbc *sql.DB, name string, temp bool) {
 	}
 
 	q := fmt.Sprintf(cursorsSchema, tt, name, cursorsIDField,
-		cursorsCursorField, cursorsCursorType, cursorsIDField)
+		cursorsCursorField, cursorsCursorType, cursorsTimeField, cursorsIDField)
 	_, err := dbc.Exec(q)
 	require.NoError(t, err)
 }

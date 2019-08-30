@@ -37,6 +37,7 @@ const (
 
 	defaultCursorCursorField = "last_event_id"
 	defaultCursorIDField     = "id"
+	defaultCursorTimeField   = "updated_at"
 	defaultAsyncPeriod       = time.Second * 5
 )
 
@@ -56,6 +57,7 @@ func NewCursorsTable(name string, options ...CursorsOption) CursorsTable {
 			name:        name,
 			cursorField: defaultCursorCursorField,
 			idField:     defaultCursorIDField,
+			timefield:   defaultCursorTimeField,
 			cursorType:  cursorTypeInt,
 		},
 		sleep:       time.Sleep,
@@ -83,6 +85,14 @@ func WithCursorCursorField(field string) CursorsOption {
 func WithCursorIDField(field string) CursorsOption {
 	return func(table *ctable) {
 		table.schema.idField = field
+	}
+}
+
+// WithCursorTimeField provides an option to configure the cursor time field.
+// It defaults to 'updated_at'.
+func WithCursorTimeField(field string) CursorsOption {
+	return func(table *ctable) {
+		table.schema.timefield = field
 	}
 }
 
@@ -139,6 +149,7 @@ type ctableSchema struct {
 	name        string
 	cursorField string
 	idField     string
+	timefield   string
 	cursorType  CursorType
 }
 
@@ -211,6 +222,7 @@ func (t *ctable) Clone(ol ...CursorsOption) CursorsTable {
 			name:        t.schema.name,
 			cursorField: t.schema.cursorField,
 			idField:     t.schema.idField,
+			timefield:   t.schema.timefield,
 			cursorType:  t.schema.cursorType,
 		},
 		sleep:       t.sleep,
