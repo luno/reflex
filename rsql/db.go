@@ -245,7 +245,7 @@ func getCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema, id string)
 	var cursor string
 	err := dbc.QueryRowContext(ctx, "select "+schema.cursorField+
 		" from "+schema.name+" where "+schema.idField+"=?", id).Scan(&cursor)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	} else if err != nil {
 		return "", errors.Wrap(err, "query last id error")

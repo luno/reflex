@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/luno/fate"
 	"github.com/luno/jettison"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/log"
@@ -18,7 +19,7 @@ func ConsumeForever(getCtx func() context.Context, consume reflex.ConsumeFunc,
 		ctx := getCtx()
 
 		err := consume(ctx, consumer, opts...)
-		if errors.Is(err, context.Canceled) || reflex.IsStoppedErr(err) {
+		if errors.IsAny(err, context.Canceled, reflex.ErrStopped, fate.ErrTempt) {
 			// Just retry on expected errors.
 			time.Sleep(time.Millisecond * 100) // Don't spin
 			continue
