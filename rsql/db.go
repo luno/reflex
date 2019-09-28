@@ -228,8 +228,9 @@ func isMySQLErr(err error, nums ...uint16) bool {
 	if err == nil {
 		return false
 	}
-	me, ok := err.(*mysql.MySQLError)
-	if !ok || me == nil {
+
+	me := new(mysql.MySQLError)
+	if !errors.As(err, &me) {
 		return false
 	}
 
