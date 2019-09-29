@@ -38,16 +38,6 @@ func (cl *Client) StreamEvents(ctx context.Context, after string,
 	return sFn(ctx, after, opts...)
 }
 
-func (cl *Client) ConsumeEvents(ctx context.Context,
-	c reflex.Consumer, opts ...reflex.StreamOption) error {
-
-	cFn := reflex.WrapConsumePB(func(ctx context.Context) (reflex.ConsumeClientPB, error) {
-		return cl.clpb.Consume(ctx)
-	})
-
-	return cFn(ctx, c, opts...)
-}
-
 func (cl *Client) Close() error {
 	return cl.conn.Close()
 }

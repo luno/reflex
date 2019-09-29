@@ -5,7 +5,6 @@ import "github.com/luno/reflex/reflexpb/reflex.proto";
 
 service ExServer{
   rpc StreamEvent1 (reflexpb.StreamRequest) returns (stream reflexpb.Event) {}
-  rpc ConsumeEvent1 (stream reflexpb.ConsumeRequest) returns (stream reflexpb.Event) {}
   rpc StreamEvent2 (reflexpb.StreamRequest) returns (stream reflexpb.Event) {}
   rpc Echo (EchoMsg) returns (EchoMsg) {}
 }

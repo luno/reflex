@@ -32,5 +32,4 @@ const (
 type Client interface {
 	StreamEvents1(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error)
 	StreamEvents2(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error)
-	ConsumeEvents1(ctx context.Context, consumer reflex.Consumer, opts ...reflex.StreamOption) error
 }

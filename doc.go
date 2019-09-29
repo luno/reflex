@@ -31,10 +31,9 @@
 // their cursor.
 //
 // The CursorsTable wraps a DB table allowing getting and setting of cursors.
-// The canonical pattern is to define one cursor table per service. Reflex also
-// supports bi-directional consume streams, event-and-ack, via gRPC.
+// The canonical pattern is to define one cursor table per service.
 //
-// There are three ways to consume event streams:
+// There are two ways to consume event streams:
 //   1. EventTable + CursorsTable: The consumer logic has local access to both
 //   the events and consumers tables. Ex. User service sends an email on UserCreated.
 //
@@ -42,10 +41,4 @@
 //   CursorsTable, but requests the event stream from a remote service via gRPC.
 //   Ex. The Fraud service consumes PaymentCreated events from the payments
 //   service. It has its own DB and CursorsTable.
-//
-//   3. gRPC Consume: The consumer logic subscribes to a bi-directional consume
-//   stream provided by the remote service receiving events and sending
-//   acknowledgments. The remote service persists the cursor in
-//   its ConsumerTable. Ex. Simple micro-service without a DB subscribes to
-//   UserDeleted events for some reason.
 package reflex

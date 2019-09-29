@@ -55,10 +55,6 @@ func (srv *Server) Stream(req *reflexpb.StreamRequest,
 	return srv.rserver.Stream(srv.stream, req, ss)
 }
 
-func (srv *Server) Consume(cs reflexpb.Reflex_ConsumeServer) error {
-	return srv.rserver.Consume(srv.stream, srv.cstore, cs)
-}
-
 func (srv *Server) Stop() {
 	srv.rserver.Stop()
 	srv.grpcServer.GracefulStop()

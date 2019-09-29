@@ -57,10 +57,6 @@ func (srv *Server) StreamEvent1(req *reflexpb.StreamRequest, ss pb.ExServer_Stre
 	return srv.rserver.Stream(srv.events1StreamFunc, req, ss)
 }
 
-func (srv *Server) ConsumeEvent1(cs pb.ExServer_ConsumeEvent1Server) error {
-	return srv.rserver.Consume(srv.events1StreamFunc, srv.cursorStore, cs)
-}
-
 func (srv *Server) StreamEvent2(req *reflexpb.StreamRequest, ss pb.ExServer_StreamEvent2Server) error {
 	return srv.rserver.Stream(srv.events2StreamFunc, req, ss)
 }

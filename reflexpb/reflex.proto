@@ -7,20 +7,12 @@ import "google/protobuf/duration.proto";
 
 service Reflex {
   rpc Stream (StreamRequest) returns (stream Event) {}
-  rpc Consume (stream ConsumeRequest) returns (stream Event) {}
 }
 
 message StreamRequest {
   int64 after_int = 1; //TODO(corver): Reserve after migration
   StreamOptions options = 2;
   string after = 3;
-}
-
-message ConsumeRequest {
-  string consumer_id = 1;
-  int64 ack_id_int = 2;  //TODO(corver): Reserve after migration
-  StreamOptions options = 3;
-  string ack_id = 4;
 }
 
 message Event {

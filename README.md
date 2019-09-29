@@ -72,5 +72,4 @@ for {
 - `CursorStore` and `StreamFunc` are decoupled and data store agnostic.
 - This results in the following types of `Consumable`:
   - local `CursorStore` with gRPC `StreamFunc` (remove events) 
-  - gRPC `Consumable` (remote events and remote cursors) 
   - local `CursorStore` and local `StreamFunc` (local events and local cursors) 

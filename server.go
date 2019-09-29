@@ -4,24 +4,15 @@ import (
 	"context"
 	"log"
 	"strconv"
-	"time"
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/reflex/reflexpb"
 )
 
-const consumeInitTimeout = time.Second * 30 // timeout waiting for consumer client to init stream.
-
 type streamServerPB interface {
 	Context() context.Context
 	Send(*reflexpb.Event) error
-}
-
-type consumeServerPB interface {
-	Context() context.Context
-	Send(*reflexpb.Event) error
-	Recv() (*reflexpb.ConsumeRequest, error)
 }
 
 // NewServer returns a new server.
@@ -90,60 +81,6 @@ func (s *Server) Stream(sFn StreamFunc, req *reflexpb.StreamRequest, sspb stream
 	return err
 }
 
-// Consume proxies consumable by streaming events and persisting cursor acks
-// for a gRPC Consume method. It always returns a non-nil error.
-func (s *Server) Consume(sFn StreamFunc, cs CursorStore, cspb consumeServerPB) error {
-	if err := s.maybeErrStopped(); err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithCancel(cspb.Context())
-	defer cs.Flush(context.Background()) // best effort flush with new context
-	defer cancel()
-
-	// init: read consumerID and options
-	var req *reflexpb.ConsumeRequest
-	err := withTimeout(consumeInitTimeout, func() error {
-		var err error
-		req, err = cspb.Recv()
-		return err
-	})
-	if err != nil {
-		return errors.Wrap(err, "error receiving init")
-	}
-	if req.ConsumerId == "" {
-		return errors.New("init request missing consumerID")
-	}
-
-	cursor, err := cs.GetCursor(ctx, req.ConsumerId)
-	if err != nil {
-		return errors.Wrap(err, "get cursor error")
-	}
-
-	stopper := func() error {
-		return awaitStop(ctx, s.stop)
-	}
-
-	acker := func() error {
-		return handleAcks(ctx, cspb, cs, req.ConsumerId)
-	}
-
-	streamer := func() error {
-		sc, err := sFn(ctx, cursor, optsFromProto(req.Options)...)
-		if err != nil {
-			return err
-		}
-		return serveStream(cspb, sc)
-	}
-
-	select {
-	case err = <-goChan(stopper):
-	case err = <-goChan(acker):
-	case err = <-goChan(streamer):
-	}
-	return err
-}
-
 // serveStream streams the events from StreamClient to streamServerPB.
 // To stop, cancel the streamServerPB's context.
 // It always returns a non-nil error.
@@ -168,18 +105,6 @@ func serveStream(ss streamServerPB, sc StreamClient) error {
 		if err := ss.Send(pb); err != nil {
 			return errors.Wrap(err, "send error")
 		}
-	}
-}
-
-func withTimeout(d time.Duration, f func() error) error {
-	t := time.NewTimer(d)
-	defer t.Stop()
-
-	select {
-	case err := <-goChan(f):
-		return err
-	case <-t.C:
-		return errors.New("timeout")
 	}
 }
 
@@ -214,29 +139,6 @@ func optsFromProto(options *reflexpb.StreamOptions) []StreamOption {
 	}
 
 	return opts
-}
-
-func handleAcks(ctx context.Context, cspb consumeServerPB,
-	cs CursorStore, consumerID string) error {
-	for {
-		if ctx.Err() != nil {
-			return errors.Wrap(ctx.Err(), "ack context error")
-		}
-
-		req, err := cspb.Recv()
-		if err != nil {
-			return errors.Wrap(err, "error receiving ack")
-		}
-
-		ack := req.AckId
-		if ack == "" && req.AckIdInt != 0 {
-			ack = strconv.FormatInt(req.AckIdInt, 10)
-		}
-
-		if err := cs.SetCursor(ctx, consumerID, ack); err != nil {
-			return errors.Wrap(err, "error setting cursor")
-		}
-	}
 }
 
 func awaitStop(ctx context.Context, stop <-chan struct{}) error {

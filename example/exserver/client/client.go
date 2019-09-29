@@ -52,16 +52,6 @@ func (cl *client) StreamEvents2(ctx context.Context, after string,
 	return sFn(ctx, after, opts...)
 }
 
-func (cl *client) ConsumeEvents1(ctx context.Context, consumer reflex.Consumer,
-	opts ...reflex.StreamOption) error {
-
-	cFn := reflex.WrapConsumePB(func(ctx context.Context) (reflex.ConsumeClientPB, error) {
-		return cl.clpb.ConsumeEvent1(ctx)
-	})
-
-	return cFn(ctx, consumer, opts...)
-}
-
 func (cl *client) Echo(ctx context.Context, msg string) (string, error) {
 	res, err := cl.clpb.Echo(ctx, &exserverpb.EchoMsg{Message: msg})
 	if err != nil {
