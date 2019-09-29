@@ -261,6 +261,55 @@ func TestInsertNoop(t *testing.T) {
 	require.EqualError(t, err, "inserting invalid noop event")
 }
 
+func TestNoGapFill(t *testing.T) {
+	const name = "events"
+	dbc, close := ConnectAndCloseTestDB(t, name, "")
+	defer close()
+
+	notifier := new(mockNotifier)
+
+	table := rsql.NewEventsTable(name,
+		rsql.WithEventsNoGapFill(),
+		rsql.WithEventsNotifier(notifier))
+
+	// Insert 1
+	err := insertTestEvent(dbc, table, i2s(1), testEventType(1))
+	require.NoError(t, err)
+
+	// Gap at 2
+	tx, err := dbc.Begin()
+	require.NoError(t, err)
+	_, err = table.Insert(context.Background(), tx, i2s(2), testEventType(2))
+	require.NoError(t, err)
+
+	// Insert 3
+	err = insertTestEvent(dbc, table, i2s(3), testEventType(3))
+	require.NoError(t, err)
+
+	// Permanent gap at 2.
+	err = tx.Rollback()
+	require.NoError(t, err)
+
+	// Cancel context on notifier watch.
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		notifier.WaitForWatch()
+		cancel()
+	}()
+
+	sc, err := table.ToStream(dbc)(ctx, "")
+	assert.NoError(t, err)
+
+	// Get 1.
+	e, err := sc.Recv()
+	require.NoError(t, err)
+	require.Equal(t, int64(1), e.ForeignIDInt())
+
+	// Block on gap 2.
+	_, err = sc.Recv()
+	assert.EqualError(t, err, "context canceled")
+}
+
 func TestDoubleGap(t *testing.T) {
 	table := rsql.NewEventsTable(eventsTable, rsql.WithEventsBackoff(time.Millisecond))
 

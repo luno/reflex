@@ -54,7 +54,6 @@ func NewEventsTable(name string, opts ...EventsOption) EventsTable {
 			foreignIDField: defaultEventForeignIDField,
 			metadataField:  defaultMetadataField,
 		},
-		loader: wrapNoopFilter(incrementLoader),
 		options: options{
 			notifier: &mockNotifier{},
 			backoff:  defaultStreamBackoff,
@@ -63,6 +62,7 @@ func NewEventsTable(name string, opts ...EventsOption) EventsTable {
 	for _, o := range opts {
 		o(table)
 	}
+	table.loader = buildLoader(table.enableCache, table.noGapFill)
 	return table
 }
 
@@ -104,7 +104,22 @@ func WithEventsNotifier(notifier EventsNotifier) EventsOption {
 // cache on the events tables.
 func WithEventsCacheEnabled() EventsOption {
 	return func(table *etable) {
-		table.loader = wrapNoopFilter(newRCache())
+		table.enableCache = true
+	}
+}
+
+// WithEventsNoGapFill provides an option to disable gap filling (write operations)
+// during event streaming. This is useful if streaming from replicas to avoid db errors.
+//
+// Note that each events table needs at least one stream with gap filling enabled
+// since streams block on gaps.
+//
+// Note that since one gap filling stream is required and since caching is supported and reads are
+// efficient (range selects on primary keys) streaming from replicas is only recommended for
+// in case of data consistency issues due to replica lag.
+func WithEventsNoGapFill() EventsOption {
+	return func(table *etable) {
+		table.noGapFill = true
 	}
 }
 
@@ -126,8 +141,11 @@ func WithEventsBackoff(d time.Duration) EventsOption {
 
 type etable struct {
 	options
-	schema etableSchema
-	loader eventsLoader
+	schema      etableSchema
+	enableCache bool
+	noGapFill   bool
+
+	loader eventsLoader // Not cloned
 }
 
 func (t *etable) Insert(ctx context.Context, tx *sql.Tx, foreignID string,
@@ -148,11 +166,15 @@ func (t *etable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreignID s
 	return t.notifier.Notify, nil
 }
 
+// Clone returns a copy of etable with the new options applied.
+// Note that the internal event loader is rebuilt, so the cache is not shared.
 func (t *etable) Clone(opts ...EventsOption) EventsTable {
 	res := *t
 	for _, opt := range opts {
 		opt(&res)
 	}
+
+	res.loader = buildLoader(res.enableCache, res.noGapFill)
 
 	return &res
 }
@@ -185,6 +207,16 @@ func (t *etable) ToStream(dbc *sql.DB, opts1 ...reflex.StreamOption) reflex.Stre
 	}
 }
 
+// buildLoader returns a new layered event loader.
+func buildLoader(enableCache, noGapFill bool) eventsLoader {
+	loader := makeIncrementLoader(noGapFill)
+	if enableCache {
+		loader = wrapRCache(loader)
+	}
+	return wrapNoopFilter(loader)
+}
+
+// options define config/state defined in etable used by the streamclients.
 type options struct {
 	reflex.StreamOptions
 
@@ -310,54 +342,64 @@ func wrapNoopFilter(loader eventsLoader) eventsLoader {
 	}
 }
 
-// incrementLoader loads monotonically incremental events (backed by auto
-// increment int column). All events after afterS and before any gap is returned.
-// Gaps may be permanent, due to rollbacks, or temporary due to uncommitted
-// transactions. A noop event is inserted into permanent gaps. Temporary gaps
-// return empty results after a timeout. This implies that streams block
-// on uncommitted transactions.
-func incrementLoader(ctx context.Context, dbc *sql.DB, schema etableSchema, after int64, lag time.Duration) ([]*reflex.Event, error) {
-	el, err := getNextEvents(ctx, dbc, schema, after, lag)
-	if err != nil {
-		return nil, err
-	} else if len(el) == 0 {
-		return nil, nil
-	}
+// makeIncrementLoader returns an incrementLoader that loads monotonically incremental
+// events (backed by auto increment int column). All events after `after` and before any
+// gap is returned. Gaps may be permanent, due to rollbacks, or temporary due to uncommitted
+// transactions. Noop events are inserted into permanent gaps, unless noGapFill which will result
+// in the stream blocking until the gap is filled by another. Temporary gaps return empty results
+// after a timeout. This implies that streams block on uncommitted transactions.
+func makeIncrementLoader(noGapFill bool) eventsLoader {
+	return func(ctx context.Context, dbc *sql.DB, schema etableSchema, after int64,
+		lag time.Duration) ([]*reflex.Event, error) {
 
-	first := el[0]
-	if !first.IsIDInt() {
-		return nil, ErrInvalidIntID
-	}
-	if after != 0 && first.IDInt() != after+1 {
-		// Gap between after and first detected, so try to fill it.
-		err := fillGap(ctx, dbc, schema, after+1)
-
-		if isMySQLErrCantWrite(err) {
-			// Cannot insert noops, only option is to wait for someone else to do it.
-			log.Info(ctx, "Reflex stream waiting, "+
-				"since cannot insert noop", j.KS("table", schema.name))
-			// TODO(corver): Add "readonly" option to silence these logs.
-			return nil, nil
-		} else if err != nil {
+		el, err := getNextEvents(ctx, dbc, schema, after, lag)
+		if err != nil {
 			return nil, err
+		} else if len(el) == 0 {
+			return nil, nil
 		}
-		// Gap filled, retry now.
-		return incrementLoader(ctx, dbc, schema, after, lag)
-	}
 
-	prev := after
-	for i, e := range el {
-		if !e.IsIDInt() {
+		first := el[0]
+		if !first.IsIDInt() {
 			return nil, ErrInvalidIntID
 		}
-		if prev != 0 && e.IDInt() != prev+1 {
-			// Gap detected, return everything before it (maybe the gap is gone on next load).
-			return el[:i], nil
+		if after != 0 && first.IDInt() != after+1 {
+			// Gap between after and first detected, so try to fill it.
+
+			if noGapFill {
+				// May not attempt to insert noops, only option is to wait for someone else to do it.
+				return nil, nil
+			}
+
+			err := fillGap(ctx, dbc, schema, after+1)
+			if isMySQLErrCantWrite(err) {
+				// Cannot insert noops, only option is to wait for someone else to do it.
+				// Disable write attempts with option WithEventsReadOnlyStream.
+				log.Info(ctx, "Reflex stream waiting, "+
+					"since cannot insert noop", j.KS("table", schema.name))
+				return nil, nil
+			} else if err != nil {
+				return nil, err
+			}
+
+			// Gap filled, retry now.
+			return makeIncrementLoader(noGapFill)(ctx, dbc, schema, after, lag)
 		}
 
-		prev = e.IDInt()
+		prev := after
+		for i, e := range el {
+			if !e.IsIDInt() {
+				return nil, ErrInvalidIntID
+			}
+			if prev != 0 && e.IDInt() != prev+1 {
+				// Gap detected, return everything before it (maybe the gap is gone on next load).
+				return el[:i], nil
+			}
+
+			prev = e.IDInt()
+		}
+		return el, nil
 	}
-	return el, nil
 }
 
 // isNoopEvent returns true if an event has "0" foreignID and 0 type.

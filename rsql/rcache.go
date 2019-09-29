@@ -23,9 +23,10 @@ type rcache struct {
 	limit  int
 }
 
-func newRCache() eventsLoader {
+// wrapRCache returns the event loader wrapped by a rcache.
+func wrapRCache(loader eventsLoader) eventsLoader {
 	return (&rcache{
-		loader: incrementLoader,
+		loader: loader,
 		limit:  defaultRCacheLimit,
 	}).GetNextEvents
 }
