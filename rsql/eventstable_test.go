@@ -465,3 +465,32 @@ func TestMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []byte(nil), e.MetaData)
 }
+
+func TestInMemNotifier(t *testing.T) {
+	const name = "events"
+	dbc, close := ConnectAndCloseTestDB(t, name, "")
+	defer close()
+
+	table := rsql.NewEventsTable(name, rsql.WithEventsBackoff(time.Hour))
+
+	t0 := time.Now()
+
+	sc, err := table.ToStream(dbc)(context.Background(), "")
+	assert.NoError(t, err)
+
+	lag := time.Millisecond * 100
+	go func() {
+		// Insert 1 after lag in cloned table (shared in-memory client)
+		// TODO(corver): adapt inmemNotifier so we can wait for listening to avoid sleep here.
+		time.Sleep(lag)
+		err := insertTestEvent(dbc, table.Clone(), i2s(1), testEventType(1))
+		require.NoError(t, err)
+	}()
+
+	// Get 1.
+	e, err := sc.Recv()
+	require.NoError(t, err)
+	require.Equal(t, int64(1), e.ForeignIDInt())
+	require.True(t, time.Since(t0) > lag)
+	require.True(t, time.Since(t0) < 2*lag)
+}

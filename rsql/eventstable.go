@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/luno/jettison/errors"
@@ -55,7 +56,7 @@ func NewEventsTable(name string, opts ...EventsOption) EventsTable {
 			metadataField:  defaultMetadataField,
 		},
 		options: options{
-			notifier: &mockNotifier{},
+			notifier: &inmemNotifier{},
 			backoff:  defaultStreamBackoff,
 		},
 	}
@@ -427,6 +428,34 @@ func (m *mockNotifier) Notify() {
 
 func (m *mockNotifier) C() <-chan struct{} {
 	return m.c
+}
+
+// inmemNotifier is an in-memory implementation of EventsNotifier.
+type inmemNotifier struct {
+	mu        sync.Mutex
+	listeners []chan struct{}
+}
+
+func (n *inmemNotifier) Notify() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	for _, l := range n.listeners {
+		select {
+		case l <- struct{}{}:
+		default:
+		}
+	}
+	n.listeners = nil
+}
+
+func (n *inmemNotifier) C() <-chan struct{} {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	ch := make(chan struct{}, 1)
+	n.listeners = append(n.listeners, ch)
+	return ch
 }
 
 // EventsNotifier provides a way to receive notifications when an event is
