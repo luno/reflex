@@ -45,8 +45,11 @@ type AckConsumeFunc func(context.Context, AckConsumer, ...reflex.StreamOption) e
 // explicit acks to update the cursor store. This is useful if events are processed
 // in batches.
 func NewAckConsume(stream reflex.StreamFunc, cstore reflex.CursorStore,
-	opts1 ...reflex.StreamOption) AckConsumeFunc {
-	return func(ctx context.Context, ackConsumer AckConsumer, opts2 ...reflex.StreamOption) error {
+	copts ...reflex.ConsumerOption) AckConsumeFunc {
+
+	return func(ctx context.Context, ackConsumer AckConsumer,
+		sopts ...reflex.StreamOption) error {
+
 		adapter := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
 			ackEvent := &AckEvent{
 				Event:        *e,
@@ -55,9 +58,10 @@ func NewAckConsume(stream reflex.StreamFunc, cstore reflex.CursorStore,
 			}
 			return ackConsumer.Consume(ctx, f, ackEvent)
 		}
-		consumer := reflex.NewConsumer(ackConsumer.Name(), adapter)
-		consumable := reflex.NewConsumable(stream, &noSetStore{cstore: cstore}, opts1...)
-		return consumable.Consume(ctx, consumer, opts2...)
+		consumer := reflex.NewConsumer(ackConsumer.Name(), adapter, copts...)
+		consumable := reflex.NewConsumable(stream, &noSetStore{cstore: cstore})
+
+		return consumable.Consume(ctx, consumer, sopts...)
 	}
 }
 
