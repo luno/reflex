@@ -56,7 +56,7 @@ func NewEventsTable(name string, opts ...EventsOption) EventsTable {
 			metadataField:  defaultMetadataField,
 		},
 		options: options{
-			notifier: &inmemNotifier{},
+			notifier: &stubNotifier{},
 			backoff:  defaultStreamBackoff,
 		},
 	}
@@ -98,6 +98,17 @@ func WithEventForeignIDField(field string) EventsOption {
 func WithEventsNotifier(notifier EventsNotifier) EventsOption {
 	return func(table *etable) {
 		table.notifier = notifier
+	}
+}
+
+// WithEventsInMemNotifier provides an option that enables an in-memory
+// notifier.
+//
+// Note: This can have a significant impact on database load
+// as all consumers might query the database on every event.
+func WithEventsInMemNotifier() EventsOption {
+	return func(table *etable) {
+		table.notifier = &inmemNotifier{}
 	}
 }
 
@@ -418,15 +429,15 @@ type NotifyFunc func()
 
 var noopFunc NotifyFunc = func() {}
 
-// mockNotifier is an implementation of EventsNotifier that does nothing.
-type mockNotifier struct {
+// stubNotifier is an implementation of EventsNotifier that does nothing.
+type stubNotifier struct {
 	c chan struct{}
 }
 
-func (m *mockNotifier) Notify() {
+func (m *stubNotifier) Notify() {
 }
 
-func (m *mockNotifier) C() <-chan struct{} {
+func (m *stubNotifier) C() <-chan struct{} {
 	return m.c
 }
 

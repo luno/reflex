@@ -471,7 +471,9 @@ func TestInMemNotifier(t *testing.T) {
 	dbc, close := ConnectAndCloseTestDB(t, name, "")
 	defer close()
 
-	table := rsql.NewEventsTable(name, rsql.WithEventsBackoff(time.Hour))
+	table := rsql.NewEventsTable(name,
+		rsql.WithEventsInMemNotifier(),
+		rsql.WithEventsBackoff(time.Hour))
 
 	t0 := time.Now()
 
