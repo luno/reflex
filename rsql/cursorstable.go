@@ -67,6 +67,11 @@ func NewCursorsTable(name string, options ...CursorsOption) CursorsTable {
 	for _, o := range options {
 		o(table)
 	}
+
+	if table.isAsyncEnabled() {
+		go table.flushForever()
+	}
+
 	return table
 }
 
@@ -138,7 +143,9 @@ type ctable struct {
 	sleep      func(d time.Duration) // Abstracted for testing
 	setCounter func()
 
-	mu           sync.Mutex
+	// Async goodies
+	flushMu      sync.Mutex // Required for flushing to DB
+	cursorMu     sync.Mutex // Required for asyncCursors
 	asyncCursors map[string]string
 	asyncDBC     *sql.DB
 	asyncPeriod  time.Duration
@@ -167,13 +174,12 @@ func (t *ctable) SetCursor(ctx context.Context, dbc *sql.DB, consumerID string, 
 		return setCursor(ctx, dbc, t.schema, consumerID, cursor)
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.cursorMu.Lock()
+	defer t.cursorMu.Unlock()
 
 	if t.asyncCursors == nil {
 		t.asyncCursors = make(map[string]string)
 		t.asyncDBC = dbc
-		go t.sleepAndFlush()
 	}
 
 	t.asyncCursors[consumerID] = cursor
@@ -184,23 +190,26 @@ func (t *ctable) isAsyncEnabled() bool {
 	return t.asyncPeriod > 0
 }
 
-func (t *ctable) sleepAndFlush() {
-	t.sleep(t.asyncPeriod)
-	if err := t.Flush(context.Background()); err != nil {
-		log.Error(nil, errors.Wrap(err, "reflex: error flushing cursor"))
-	}
-}
-
 func (t *ctable) Flush(ctx context.Context) error {
 	if !t.isAsyncEnabled() {
 		return nil
 	}
 
-	t.mu.Lock()
+	t.cursorMu.Lock()
 	dbc := t.asyncDBC
 	m := t.asyncCursors
 	t.asyncCursors = nil
-	t.mu.Unlock()
+
+	if len(m) == 0 {
+		// Nothing to flush
+		t.cursorMu.Unlock()
+		return nil
+	}
+
+	// Grab the flush mutex before releasing the cursor mutex.
+	t.flushMu.Lock()
+	t.cursorMu.Unlock()
+	defer t.flushMu.Unlock()
 
 	// TODO(corver): Write all at once.
 	for id, cursor := range m {
@@ -215,8 +224,8 @@ func (t *ctable) Flush(ctx context.Context) error {
 }
 
 func (t *ctable) Clone(ol ...CursorsOption) CursorsTable {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.cursorMu.Lock()
+	defer t.cursorMu.Unlock()
 	table := &ctable{
 		schema: ctableSchema{
 			name:        t.schema.name,
@@ -234,6 +243,11 @@ func (t *ctable) Clone(ol ...CursorsOption) CursorsTable {
 	for _, o := range ol {
 		o(table)
 	}
+
+	if table.isAsyncEnabled() {
+		go table.flushForever()
+	}
+
 	return table
 }
 
@@ -246,6 +260,17 @@ func (t *ctable) ToStore(dbc *sql.DB, ol ...CursorsOption) reflex.CursorStore {
 		cs.t = t.Clone(ol...).(*ctable)
 	}
 	return cs
+}
+
+func (t *ctable) flushForever() {
+	for {
+		t.sleep(t.asyncPeriod)
+
+		ctx := context.Background()
+		if err := t.Flush(ctx); err != nil {
+			log.Error(ctx, errors.Wrap(err, "reflex: error flushing cursor"))
+		}
+	}
 }
 
 type cursorStore struct {

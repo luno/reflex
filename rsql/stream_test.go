@@ -232,8 +232,21 @@ func TestConsumeStreamLag(t *testing.T) {
 	}
 
 	errDone := errors.New("done", j.C("ERR_DONE"))
-	var results []*reflex.Event
+
+	var (
+		results []*reflex.Event
+		mu      sync.Mutex
+	)
+
+	countResults := func() interface{} {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(results)
+	}
+
 	f := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+		mu.Lock()
+		defer mu.Unlock()
 		results = append(results, e)
 		if len(results) == total {
 			return errDone
@@ -245,7 +258,7 @@ func TestConsumeStreamLag(t *testing.T) {
 
 	go func() {
 		// wait for first batch
-		waitForResult(t, firstBatch, func() interface{} { return len(results) })
+		waitForResult(t, firstBatch, countResults)
 
 		// push back rest of events 2 mins
 		for i := firstBatch; i < total; i++ {
@@ -254,7 +267,7 @@ func TestConsumeStreamLag(t *testing.T) {
 		}
 
 		// wait for rest
-		waitForResult(t, total, func() interface{} { return len(results) })
+		waitForResult(t, total, countResults)
 
 		time.Sleep(time.Second) // sleep and cancel (should not affect test duration)
 		cancel()
@@ -266,6 +279,8 @@ func TestConsumeStreamLag(t *testing.T) {
 	err := consumable.Consume(ctx, consumer)
 	assert.True(t, errors.Is(err, errDone))
 
+	mu.Lock()
+	defer mu.Unlock()
 	assert.Len(t, results, total)
 	for i, e := range results {
 		ii := i + 1

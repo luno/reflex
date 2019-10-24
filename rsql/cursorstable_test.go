@@ -3,11 +3,12 @@ package rsql_test
 import (
 	"context"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/luno/reflex/rsql"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewCursorsTable(t *testing.T) {
@@ -66,27 +67,27 @@ func TestNewCursorsTable(t *testing.T) {
 				// ensure bootstrapped at 0 per unique consumer
 				if !ids[i.consumerID] {
 					c, err := table.GetCursor(context.Background(), dbc, i.consumerID)
-					assert.NoError(t, err)
-					assert.Equal(t, "", c)
+					require.NoError(t, err)
+					require.Equal(t, "", c)
 				}
 				ids[i.consumerID] = true
 
 				err := table.SetCursor(context.Background(), dbc, i.consumerID, strconv.Itoa(i.cursor))
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 
 			for _, o := range test.output {
 				c, err := table.GetCursor(context.Background(), dbc, o.consumerID)
-				assert.NoError(t, err)
-				assert.Equal(t, strconv.Itoa(o.cursor), c)
+				require.NoError(t, err)
+				require.Equal(t, strconv.Itoa(o.cursor), c)
 			}
 
-			assert.Equal(t, len(test.input), sets)
+			require.Equal(t, len(test.input), sets)
 		})
 	}
 }
 
-func TestSetCursor(t *testing.T) {
+func TestAsyncSetCursor(t *testing.T) {
 	dbc := ConnectTestDB(t, "", "cursors")
 	defer dbc.Close()
 
@@ -94,76 +95,104 @@ func TestSetCursor(t *testing.T) {
 
 	ct := rsql.NewCursorsTable(
 		"cursors",
-		rsql.WithTestCursorSleep(t, s.IncCount),
+		rsql.WithTestCursorSleep(t, s.Block),
 	)
 
 	c, err := ct.GetCursor(context.Background(), dbc, "test")
-	assert.NoError(t, err)
-	assert.Equal(t, "", c)
+	require.NoError(t, err)
+	require.Equal(t, "", c)
 
 	err = ct.SetCursor(context.Background(), dbc, "test", "5")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	c, err = ct.GetCursor(context.Background(), dbc, "test")
-	assert.NoError(t, err)
-	assert.Equal(t, "", c)
+	require.NoError(t, err)
+	require.Equal(t, "", c)
 
-	waitForResult(t, "1", s.Count)
-
-	s.block = false
+	s.UnblockOnce()
+	waitForResult(t, 2, s.Count)
 
 	getCursor := func() interface{} {
 		c, err := ct.GetCursor(context.Background(), dbc, "test")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return c
 	}
 
 	waitForResult(t, "5", getCursor)
+}
+
+func TestSyncSetCursor(t *testing.T) {
+	dbc := ConnectTestDB(t, "", "cursors")
+	defer dbc.Close()
+
+	s := new(testSleep)
 
 	//Clone table and disable async writes.
-	ct = ct.Clone(rsql.WithCursorAsyncDisabled())
+	ct := rsql.NewCursorsTable(
+		"cursors",
+		rsql.WithCursorAsyncDisabled(),
+		rsql.WithTestCursorSleep(t, s.Block),
+	)
 
-	countBeforeSet := s.Count()
+	err := ct.SetCursor(context.Background(), dbc, "test", "10")
+	require.NoError(t, err)
 
-	err = ct.SetCursor(context.Background(), dbc, "test", "10")
-	assert.NoError(t, err)
+	c, err := ct.GetCursor(context.Background(), dbc, "test")
+	require.NoError(t, err)
+	require.Equal(t, "10", c)
 
-	c, err = ct.GetCursor(context.Background(), dbc, "test")
-	assert.NoError(t, err)
-	assert.Equal(t, "10", c)
-
-	assert.Equal(t, countBeforeSet, s.Count())
+	require.Equal(t, 0, s.Count())
 }
 
 type testSleep struct {
 	count int
 	block bool
+	mu    sync.Mutex
+}
+
+func (s *testSleep) UnblockOnce() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.block = false
+}
+
+func (s *testSleep) isBlocked() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.block
 }
 
 func (s *testSleep) Count() interface{} {
-	return strconv.Itoa(s.count)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.count
 }
 
-func (s *testSleep) IncCount(d time.Duration) {
+func (s *testSleep) Block(_ time.Duration) {
+	s.mu.Lock()
 	s.count++
-}
+	s.mu.Unlock()
 
-func (s *testSleep) Sleep(d time.Duration) {
-	s.count++
-	for s.block {
+	for s.isBlocked() {
 		time.Sleep(time.Nanosecond) // don't spin
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.block = true
 }
 
 func waitForResult(t *testing.T, expect interface{}, f func() interface{}) {
+	t.Helper()
 	t0 := time.Now()
 
 	for {
-		if f() == expect {
+		last := f()
+		if last == expect {
 			return
 		}
 		if time.Now().Sub(t0) > time.Second*2 {
-			assert.Fail(t, "Timeout waiting for f")
+			require.Fail(t, "Timeout waiting for result", "last=%v", last)
 			return
 		}
 		time.Sleep(time.Millisecond) // don't spin
