@@ -33,17 +33,17 @@ func TestActivityGauge(t *testing.T) {
 		}
 	}
 
-	g.Register(label1, time.Nanosecond) // will always be inactive
-	g.Register(label2, time.Minute)     // will always be active
-	g.Register(label3, -1)              // disabled
+	k1 := g.Register(label1, time.Nanosecond) // will always be inactive
+	k2 := g.Register(label2, time.Minute)     // will always be active
+	k3 := g.Register(label3, -1)              // disabled
 
 	ch := make(chan prometheus.Metric, 5)
 	g.Collect(ch)
 	assertMetric(ch)
 
-	g.SetActive(label1)
-	g.SetActive(label2)
-	g.SetActive(label3)
+	g.SetActive(k1)
+	g.SetActive(k2)
+	g.SetActive(k3)
 
 	ch = make(chan prometheus.Metric, 5)
 	g.Collect(ch)

@@ -16,6 +16,12 @@ type consumer struct {
 	name        ConsumerName
 	lagAlert    time.Duration
 	activityTTL time.Duration
+
+	lagGauge      prometheus.Gauge
+	lagAlertGauge prometheus.Gauge
+	errorCounter  prometheus.Counter
+	latencyHist   prometheus.Observer
+	activityKey   string
 }
 
 type ConsumerOption func(*consumer)
@@ -40,18 +46,25 @@ func WithConsumerActivityTTL(ttl time.Duration) ConsumerOption {
 // NewConsumer returns a new instrumented consumer of events.
 func NewConsumer(name ConsumerName, fn func(context.Context, fate.Fate, *Event) error,
 	opts ...ConsumerOption) Consumer {
+
+	labels := prometheus.Labels{consumerLabel: name.String()}
+
 	c := &consumer{
-		fn:          fn,
-		name:        name,
-		lagAlert:    defaultLagAlert,
-		activityTTL: defaultActivityTTL,
+		fn:            fn,
+		name:          name,
+		lagAlert:      defaultLagAlert,
+		activityTTL:   defaultActivityTTL,
+		lagGauge:      consumerLag.With(labels),
+		lagAlertGauge: consumerLagAlert.With(labels),
+		errorCounter:  consumerErrors.With(labels),
+		latencyHist:   consumerLatency.With(labels),
 	}
 
 	for _, o := range opts {
 		o(c)
 	}
 
-	consumerActivityGauge.Register(c.makePromLabels(), c.activityTTL)
+	c.activityKey = consumerActivityGauge.Register(labels, c.activityTTL)
 
 	return c
 }
@@ -60,33 +73,28 @@ func (c *consumer) Name() ConsumerName {
 	return c.name
 }
 
-func (c *consumer) makePromLabels() prometheus.Labels {
-	return prometheus.Labels{consumerLabel: c.name.String()}
-}
-
 func (c *consumer) Consume(ctx context.Context, fate fate.Fate,
 	event *Event) error {
-	labels := c.makePromLabels()
 	t0 := time.Now()
 
-	consumerActivityGauge.SetActive(labels)
+	consumerActivityGauge.SetActive(c.activityKey)
 
 	lag := t0.Sub(event.Timestamp)
-	consumerLag.With(labels).Set(lag.Seconds())
+	c.lagGauge.Set(lag.Seconds())
 
 	alert := 0.0
 	if lag > c.lagAlert && c.lagAlert > 0 {
 		alert = 1
 	}
-	consumerLagAlert.With(labels).Set(alert)
+	c.lagAlertGauge.Set(alert)
 
 	err := c.fn(ctx, fate, event)
 	if err != nil {
-		consumerErrors.With(labels).Inc()
+		c.errorCounter.Inc()
 	}
 
 	latency := time.Since(t0)
-	consumerLatency.With(labels).Observe(latency.Seconds())
+	c.latencyHist.Observe(latency.Seconds())
 
 	return err
 }

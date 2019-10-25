@@ -79,30 +79,29 @@ type state struct {
 	ttl    time.Duration
 }
 
-// Register registers the consumer labels with its ttl and ticks it as active.
-func (g *activityGauge) Register(labels prometheus.Labels, ttl time.Duration) {
-	k := labelsToKey(labels)
+// Register registers the consumer labels with its ttl and ticks it as active and returns a consumer key.
+func (g *activityGauge) Register(labels prometheus.Labels, ttl time.Duration) string {
+	key := labelsToKey(labels)
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	g.states[k] = state{
+	g.states[key] = state{
 		labels: labels,
 		ttl:    ttl,
 		tick:   time.Now(),
 	}
+	return key
 }
 
-// SetActive ticks the consumer labels as active.
-func (g *activityGauge) SetActive(labels prometheus.Labels) {
-	k := labelsToKey(labels)
-
+// SetActive ticks the consumer key as active.
+func (g *activityGauge) SetActive(key string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	s := g.states[k]
+	s := g.states[key]
 	s.tick = time.Now()
-	g.states[k] = s
+	g.states[key] = s
 }
 
 func (g *activityGauge) Describe(ch chan<- *prometheus.Desc) {
