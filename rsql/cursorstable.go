@@ -68,10 +68,6 @@ func NewCursorsTable(name string, options ...CursorsOption) CursorsTable {
 		o(table)
 	}
 
-	if table.isAsyncEnabled() {
-		go table.flushForever()
-	}
-
 	return table
 }
 
@@ -146,6 +142,7 @@ type ctable struct {
 	// Async goodies
 	flushMu      sync.Mutex // Required for flushing to DB
 	cursorMu     sync.Mutex // Required for asyncCursors
+	cursorOnce   sync.Once
 	asyncCursors map[string]string
 	asyncDBC     *sql.DB
 	asyncPeriod  time.Duration
@@ -173,6 +170,10 @@ func (t *ctable) SetCursor(ctx context.Context, dbc *sql.DB, consumerID string, 
 		t.setCounter()
 		return setCursor(ctx, dbc, t.schema, consumerID, cursor)
 	}
+
+	t.cursorOnce.Do(func() {
+		go t.flushForever()
+	})
 
 	t.cursorMu.Lock()
 	defer t.cursorMu.Unlock()

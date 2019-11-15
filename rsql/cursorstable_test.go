@@ -91,7 +91,7 @@ func TestAsyncSetCursor(t *testing.T) {
 	dbc := ConnectTestDB(t, "", "cursors")
 	defer dbc.Close()
 
-	s := new(testSleep)
+	s := newTestSleep()
 
 	ct := rsql.NewCursorsTable(
 		"cursors",
@@ -142,6 +142,12 @@ func TestSyncSetCursor(t *testing.T) {
 	require.Equal(t, "10", c)
 
 	require.Equal(t, 0, s.Count())
+}
+
+func newTestSleep() *testSleep {
+	return &testSleep{
+		block: true,
+	}
 }
 
 type testSleep struct {
