@@ -119,12 +119,8 @@ func getNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
 }
 
 func GetNextEventsForTesting(t *testing.T, ctx context.Context, dbc *sql.DB,
-	table EventsTable, after int64, lag time.Duration) ([]*reflex.Event, error) {
-	et, ok := table.(*etable)
-	if !ok {
-		t.Fatalf("invalid EventsTable type=%T", table)
-	}
-	return getNextEvents(ctx, dbc, et.schema, after, lag)
+	table *EventsTable, after int64, lag time.Duration) ([]*reflex.Event, error) {
+	return getNextEvents(ctx, dbc, table.schema, after, lag)
 }
 
 func GetLatestIDForTesting(t *testing.T, ctx context.Context, dbc *sql.DB, eventTable string) (int64, error) {

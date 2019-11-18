@@ -35,19 +35,15 @@ func TestCursorsTable(t *testing.T, dbc *sql.DB, table CursorsTable) {
 
 // TestEventsTable provides a helper function to test event tables
 // with int foreign id columns.
-func TestEventsTableInt(t *testing.T, dbc *sql.DB, table EventsTableInt) {
-	inttable, ok := table.(*etableint)
-	if !assert.True(t, ok) {
-		return
-	}
-	TestEventsTableWithID(t, dbc, inttable.EventsTable, testForeignIDInt)
+func TestEventsTableInt(t *testing.T, dbc *sql.DB, table *EventsTableInt) {
+	TestEventsTableWithID(t, dbc, table.EventsTable, testForeignIDInt)
 }
 
-func TestEventsTable(t *testing.T, dbc *sql.DB, table EventsTable) {
+func TestEventsTable(t *testing.T, dbc *sql.DB, table *EventsTable) {
 	TestEventsTableWithID(t, dbc, table, testForeignIDString)
 }
 
-func TestEventsTableWithID(t *testing.T, dbc *sql.DB, table EventsTable, foreignID string) {
+func TestEventsTableWithID(t *testing.T, dbc *sql.DB, table *EventsTable, foreignID string) {
 	tx, err := dbc.Begin()
 	require.NoError(t, err)
 	for i := 1; i <= numberOfEvents; i++ {

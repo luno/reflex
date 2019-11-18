@@ -18,7 +18,7 @@ func (t testEventType) ReflexType() int {
 	return int(t)
 }
 
-func insertTestEvent(dbc *sql.DB, table rsql.EventsTable, foreignID string, typ reflex.EventType) error {
+func insertTestEvent(dbc *sql.DB, table *rsql.EventsTable, foreignID string, typ reflex.EventType) error {
 	tx, err := dbc.Begin()
 	if err != nil {
 		return err
@@ -34,7 +34,7 @@ func insertTestEvent(dbc *sql.DB, table rsql.EventsTable, foreignID string, typ 
 	return tx.Commit()
 }
 
-func insertTestEventMeta(dbc *sql.DB, table rsql.EventsTable, foreignID string,
+func insertTestEventMeta(dbc *sql.DB, table *rsql.EventsTable, foreignID string,
 	typ reflex.EventType, metadata []byte) error {
 	tx, err := dbc.Begin()
 	if err != nil {

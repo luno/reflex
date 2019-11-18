@@ -47,6 +47,8 @@ github.com/luno/fate v0.0.0-20190806092837-672a76b2d6f2 h1:vCx1uyqmaOfTO0gei0Q6E
 github.com/luno/fate v0.0.0-20190806092837-672a76b2d6f2/go.mod h1:yPLdIlI6hyzcZ+wYdYiyjDsSUq7PN2QWx8SQfZDc6vQ=
 github.com/luno/jettison v0.0.0-20191014084106-b0501ece4f1c h1:ELl7p64RmtilIwrQc3R/vXaV5yITUd5S/tc8nEuie10=
 github.com/luno/jettison v0.0.0-20191014084106-b0501ece4f1c/go.mod h1:tOyVRFDlkZ5NqB7unEwcmrqMqsy+ka3DEtvwH+Q5W6g=
+github.com/luno/jettison v0.0.0-20191025124352-c2fa810dd1ee h1:jlsbXy8A6kLOfO9u8p25h87uu4+Tnh0AuwQ4sImWf1Y=
+github.com/luno/jettison v0.0.0-20191025124352-c2fa810dd1ee/go.mod h1:IVntidW2Z2luwfdIpwgvUZSwnRk82RRPfoj0h2P7W+c=
 github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0jegS5sx/RkqARlsWZ6pIwiU=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
@@ -118,4 +120,6 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/src-d/go-billy.v4 v4.3.0/go.mod h1:tm33zBoOwxjYHZIE+OV8bxTWFMJLrconzFMd38aARFk=
 gopkg.in/yaml.v2 v2.2.1/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+gopkg.in/yaml.v2 v2.2.4 h1:/eiJrUcujPVeJ3xlSWaiNi3uSVmDGBK1pDHUHAnao1I=
+gopkg.in/yaml.v2 v2.2.4/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=

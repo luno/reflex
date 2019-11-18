@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -204,21 +203,6 @@ func TestEventsTable(t *testing.T) {
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
-
-			// Ensure this test doesn't hang forever
-			ok := false
-			defer func() {
-				ok = true
-			}()
-			go func() {
-				time.Sleep(time.Second * 5)
-				if ok {
-					return
-				}
-				cancel()
-				assert.Fail(t, "unexpected timeout")
-				os.Exit(1)
-			}()
 
 			sc, err := table.ToStream(dbc)(ctx, "")
 			assert.NoError(t, err)

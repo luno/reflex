@@ -9,6 +9,8 @@ import (
 	"github.com/luno/jettison/log"
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/reflexpb"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"google.golang.org/grpc"
 )
 
@@ -23,10 +25,11 @@ func NewServer(_ testing.TB, stream reflex.StreamFunc,
 	grpcServer := grpc.NewServer()
 
 	srv := &Server{
-		stream:     stream,
-		cstore:     cstore,
-		grpcServer: grpcServer,
-		rserver:    reflex.NewServer(),
+		stream:      stream,
+		cstore:      cstore,
+		grpcServer:  grpcServer,
+		rserver:     reflex.NewServer(),
+		sentCounter: prometheus.NewCounter(prometheus.CounterOpts{Name: "sent_total"}),
 	}
 
 	reflexpb.RegisterReflexServer(grpcServer, srv)
@@ -44,18 +47,34 @@ func NewServer(_ testing.TB, stream reflex.StreamFunc,
 var _ reflexpb.ReflexServer = (*Server)(nil)
 
 type Server struct {
-	grpcServer *grpc.Server
-	stream     reflex.StreamFunc
-	cstore     reflex.CursorStore
-	rserver    *reflex.Server
+	grpcServer  *grpc.Server
+	stream      reflex.StreamFunc
+	cstore      reflex.CursorStore
+	rserver     *reflex.Server
+	sentCounter prometheus.Counter
 }
 
 func (srv *Server) Stream(req *reflexpb.StreamRequest,
 	ss reflexpb.Reflex_StreamServer) error {
-	return srv.rserver.Stream(srv.stream, req, ss)
+
+	return srv.rserver.Stream(srv.stream, req, &counter{ss, srv.sentCounter})
+}
+
+func (srv *Server) SentCount() float64 {
+	return testutil.ToFloat64(srv.sentCounter)
 }
 
 func (srv *Server) Stop() {
 	srv.rserver.Stop()
 	srv.grpcServer.GracefulStop()
+}
+
+type counter struct {
+	reflexpb.Reflex_StreamServer
+	counter prometheus.Counter
+}
+
+func (c *counter) Send(e *reflexpb.Event) error {
+	c.counter.Inc()
+	return c.Reflex_StreamServer.Send(e)
 }

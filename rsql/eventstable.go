@@ -19,35 +19,8 @@ const (
 
 var ErrInvalidIntID = errors.New("invalid id, only int supported", j.C("ERR_82d0368b5478d378"))
 
-// EventsTable provides an interface to an events db table.
-type EventsTable interface {
-	// Insert inserts an event into the EventsTable and returns a function that
-	// can be optionally called to notify the table's EventNotifier of the change.
-	// The intended pattern for this function is:
-	//
-	//       notify, err := etable.Insert(ctx, tx, ...)
-	//       if err != nil {
-	//         return err
-	//       }
-	//	     defer notify()
-	//       return doWorkAndCommit(tx)
-	Insert(ctx context.Context, tx *sql.Tx, foreignID string, typ reflex.EventType) (
-		NotifyFunc, error)
-
-	// InsertWithMetadata inserts an event with metadata into the EventsTable.
-	// Note metadata is disabled by default, enable with WithEventMetadataField option.
-	InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreignID string, typ reflex.EventType,
-		metadata []byte) (NotifyFunc, error)
-
-	// ToStream returns a reflex StreamFunc interface of this EventsTable.
-	ToStream(dbc *sql.DB, opts ...reflex.StreamOption) reflex.StreamFunc
-
-	// Clone returns a copy of the EventsTable with the given options applied.
-	Clone(opts ...EventsOption) EventsTable
-}
-
-func NewEventsTable(name string, opts ...EventsOption) EventsTable {
-	table := &etable{
+func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
+	table := &EventsTable{
 		schema: etableSchema{
 			name:           name,
 			timeField:      defaultEventTimeField,
@@ -67,12 +40,12 @@ func NewEventsTable(name string, opts ...EventsOption) EventsTable {
 	return table
 }
 
-type EventsOption func(*etable)
+type EventsOption func(*EventsTable)
 
 // WithEventTimeField provides an option to set the event DB timestamp field.
 // It defaults to 'timestamp'.
 func WithEventTimeField(field string) EventsOption {
-	return func(table *etable) {
+	return func(table *EventsTable) {
 		table.schema.timeField = field
 	}
 }
@@ -80,7 +53,7 @@ func WithEventTimeField(field string) EventsOption {
 // WithEventTypeField provides an option to set the event DB type field.
 // It defaults to 'type'.
 func WithEventTypeField(field string) EventsOption {
-	return func(table *etable) {
+	return func(table *EventsTable) {
 		table.schema.typeField = field
 	}
 }
@@ -88,7 +61,7 @@ func WithEventTypeField(field string) EventsOption {
 // WithEventForeignIDField provides an option to set the event DB foreignID field.
 // It defaults to 'foreign_id'.
 func WithEventForeignIDField(field string) EventsOption {
-	return func(table *etable) {
+	return func(table *EventsTable) {
 		table.schema.foreignIDField = field
 	}
 }
@@ -96,7 +69,7 @@ func WithEventForeignIDField(field string) EventsOption {
 // WithEventsNotifier provides an option to receive event notifications
 // and trigger StreamClients when new events are available.
 func WithEventsNotifier(notifier EventsNotifier) EventsOption {
-	return func(table *etable) {
+	return func(table *EventsTable) {
 		table.notifier = notifier
 	}
 }
@@ -107,7 +80,7 @@ func WithEventsNotifier(notifier EventsNotifier) EventsOption {
 // Note: This can have a significant impact on database load
 // as all consumers might query the database on every event.
 func WithEventsInMemNotifier() EventsOption {
-	return func(table *etable) {
+	return func(table *EventsTable) {
 		table.notifier = &inmemNotifier{}
 	}
 }
@@ -115,7 +88,7 @@ func WithEventsInMemNotifier() EventsOption {
 // WithEventsCacheEnabled provides an option to enable the read-through
 // cache on the events tables.
 func WithEventsCacheEnabled() EventsOption {
-	return func(table *etable) {
+	return func(table *EventsTable) {
 		table.enableCache = true
 	}
 }
@@ -130,7 +103,7 @@ func WithEventsCacheEnabled() EventsOption {
 // efficient (range selects on primary keys) streaming from replicas is only recommended for
 // in case of data consistency issues due to replica lag.
 func WithEventsNoGapFill() EventsOption {
-	return func(table *etable) {
+	return func(table *EventsTable) {
 		table.noGapFill = true
 	}
 }
@@ -138,7 +111,7 @@ func WithEventsNoGapFill() EventsOption {
 // WithEventMetadataField provides an option to set the event DB metadata field.
 // It is disabled by default; ie. ''.
 func WithEventMetadataField(field string) EventsOption {
-	return func(table *etable) {
+	return func(table *EventsTable) {
 		table.schema.metadataField = field
 	}
 }
@@ -146,12 +119,13 @@ func WithEventMetadataField(field string) EventsOption {
 // WithEventsBackoff provides an option to set the backoff period between polling
 // the DB for new events.
 func WithEventsBackoff(d time.Duration) EventsOption {
-	return func(table *etable) {
+	return func(table *EventsTable) {
 		table.backoff = d
 	}
 }
 
-type etable struct {
+// EventsTable provides reflex events for a sql db table.
+type EventsTable struct {
 	options
 	schema      etableSchema
 	enableCache bool
@@ -160,12 +134,24 @@ type etable struct {
 	loader eventsLoader // Not cloned
 }
 
-func (t *etable) Insert(ctx context.Context, tx *sql.Tx, foreignID string,
+// Insert inserts an event into the EventsTable and returns a function that
+// can be optionally called to notify the table's EventNotifier of the change.
+// The intended pattern for this function is:
+//
+//       notify, err := etable.Insert(ctx, tx, ...)
+//       if err != nil {
+//         return err
+//       }
+//	     defer notify()
+//       return doWorkAndCommit(tx)
+func (t *EventsTable) Insert(ctx context.Context, tx *sql.Tx, foreignID string,
 	typ reflex.EventType) (NotifyFunc, error) {
 	return t.InsertWithMetadata(ctx, tx, foreignID, typ, nil)
 }
 
-func (t *etable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreignID string,
+// InsertWithMetadata inserts an event with metadata into the EventsTable.
+// Note metadata is disabled by default, enable with WithEventMetadataField option.
+func (t *EventsTable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreignID string,
 	typ reflex.EventType, metadata []byte) (NotifyFunc, error) {
 	if isNoop(foreignID, typ) {
 		return nil, errors.New("inserting invalid noop event")
@@ -178,9 +164,9 @@ func (t *etable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreignID s
 	return t.notifier.Notify, nil
 }
 
-// Clone returns a copy of etable with the new options applied.
+// Clone returns a copy of EventsTable with the new options applied.
 // Note that the internal event loader is rebuilt, so the cache is not shared.
-func (t *etable) Clone(opts ...EventsOption) EventsTable {
+func (t *EventsTable) Clone(opts ...EventsOption) *EventsTable {
 	res := *t
 	for _, opt := range opts {
 		opt(&res)
@@ -193,7 +179,7 @@ func (t *etable) Clone(opts ...EventsOption) EventsTable {
 
 // Stream returns a StreamClient that streams events from the db.
 // It is only safe for a single goroutine to use.
-func (t *etable) Stream(ctx context.Context, dbc *sql.DB, after string,
+func (t *EventsTable) Stream(ctx context.Context, dbc *sql.DB, after string,
 	opts ...reflex.StreamOption) reflex.StreamClient {
 
 	sc := &streamclient{
@@ -212,7 +198,8 @@ func (t *etable) Stream(ctx context.Context, dbc *sql.DB, after string,
 	return sc
 }
 
-func (t *etable) ToStream(dbc *sql.DB, opts1 ...reflex.StreamOption) reflex.StreamFunc {
+// ToStream returns a reflex StreamFunc interface of this EventsTable.
+func (t *EventsTable) ToStream(dbc *sql.DB, opts1 ...reflex.StreamOption) reflex.StreamFunc {
 	return func(ctx context.Context, after string,
 		opts2 ...reflex.StreamOption) (client reflex.StreamClient, e error) {
 		return t.Stream(ctx, dbc, after, append(opts1, opts2...)...), nil
@@ -228,7 +215,7 @@ func buildLoader(enableCache, noGapFill bool) eventsLoader {
 	return wrapNoopFilter(loader)
 }
 
-// options define config/state defined in etable used by the streamclients.
+// options define config/state defined in EventsTable used by the streamclients.
 type options struct {
 	reflex.StreamOptions
 
