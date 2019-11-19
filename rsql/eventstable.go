@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/luno/jettison/errors"
-	"github.com/luno/jettison/j"
-	"github.com/luno/jettison/log"
 	"github.com/luno/reflex"
 )
 
@@ -17,8 +15,7 @@ const (
 	defaultStreamBackoff = time.Second * 10
 )
 
-var ErrInvalidIntID = errors.New("invalid id, only int supported", j.C("ERR_82d0368b5478d378"))
-
+// NewEventsTable returns a new events table.
 func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	table := &EventsTable{
 		schema: etableSchema{
@@ -36,10 +33,16 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	for _, o := range opts {
 		o(table)
 	}
-	table.loader = buildLoader(table.enableCache, table.noGapFill)
+
+	table.gapCh = make(chan Gap)
+	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.enableCache, table.schema)
+
+	eventsGapListenGauge.WithLabelValues(table.schema.name) // Init zero gap filling gauge.
+
 	return table
 }
 
+// EventsOption defines a functional option to configure new event tables.
 type EventsOption func(*EventsTable)
 
 // WithEventTimeField provides an option to set the event DB timestamp field.
@@ -66,6 +69,14 @@ func WithEventForeignIDField(field string) EventsOption {
 	}
 }
 
+// WithEventMetadataField provides an option to set the event DB metadata field.
+// It is disabled by default; ie. ''.
+func WithEventMetadataField(field string) EventsOption {
+	return func(table *EventsTable) {
+		table.schema.metadataField = field
+	}
+}
+
 // WithEventsNotifier provides an option to receive event notifications
 // and trigger StreamClients when new events are available.
 func WithEventsNotifier(notifier EventsNotifier) EventsOption {
@@ -78,7 +89,8 @@ func WithEventsNotifier(notifier EventsNotifier) EventsOption {
 // notifier.
 //
 // Note: This can have a significant impact on database load
-// as all consumers might query the database on every event.
+// if the cache is disabled since all consumers might query
+// the database on every event.
 func WithEventsInMemNotifier() EventsOption {
 	return func(table *EventsTable) {
 		table.notifier = &inmemNotifier{}
@@ -87,51 +99,42 @@ func WithEventsInMemNotifier() EventsOption {
 
 // WithEventsCacheEnabled provides an option to enable the read-through
 // cache on the events tables.
+// TODO(corver): Enable this by default.
 func WithEventsCacheEnabled() EventsOption {
 	return func(table *EventsTable) {
 		table.enableCache = true
 	}
 }
 
-// WithEventsNoGapFill provides an option to disable gap filling (write operations)
-// during event streaming. This is useful if streaming from replicas to avoid db errors.
-//
-// Note that each events table needs at least one stream with gap filling enabled
-// since streams block on gaps.
-//
-// Note that since one gap filling stream is required and since caching is supported and reads are
-// efficient (range selects on primary keys) streaming from replicas is only recommended for
-// in case of data consistency issues due to replica lag.
-func WithEventsNoGapFill() EventsOption {
-	return func(table *EventsTable) {
-		table.noGapFill = true
-	}
-}
-
-// WithEventMetadataField provides an option to set the event DB metadata field.
-// It is disabled by default; ie. ''.
-func WithEventMetadataField(field string) EventsOption {
-	return func(table *EventsTable) {
-		table.schema.metadataField = field
-	}
-}
-
 // WithEventsBackoff provides an option to set the backoff period between polling
-// the DB for new events.
+// the DB for new events. It defaults to 10s.
 func WithEventsBackoff(d time.Duration) EventsOption {
 	return func(table *EventsTable) {
 		table.backoff = d
 	}
 }
 
-// EventsTable provides reflex events for a sql db table.
+// WithEventsLoader provides an option to set the base event loader.
+// The default loader is configured with the WithEventsXField options.
+func WithEventsLoader(loader Loader) EventsOption {
+	return func(table *EventsTable) {
+		table.baseLoader = loader
+	}
+}
+
+// EventsTable provides reflex event insertion and streaming
+// for a sql db table.
 type EventsTable struct {
 	options
 	schema      etableSchema
 	enableCache bool
-	noGapFill   bool
+	baseLoader  Loader
 
-	loader eventsLoader // Not cloned
+	// Stateful fields not cloned
+	currentLoader Loader
+	gapCh         chan Gap
+	gapFns        []func(Gap)
+	gapMu         sync.Mutex
 }
 
 // Insert inserts an event into the EventsTable and returns a function that
@@ -164,17 +167,24 @@ func (t *EventsTable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreig
 	return t.notifier.Notify, nil
 }
 
-// Clone returns a copy of EventsTable with the new options applied.
-// Note that the internal event loader is rebuilt, so the cache is not shared.
+// Clone returns a new etable cloned from the config of t with the new options applied.
+// Note that the stateful fields are not clone, so the cache is not shared.
 func (t *EventsTable) Clone(opts ...EventsOption) *EventsTable {
-	res := *t
+	table := &EventsTable{
+		options:     t.options,
+		schema:      t.schema,
+		enableCache: t.enableCache,
+		baseLoader:  nil,
+	}
 	for _, opt := range opts {
-		opt(&res)
+		opt(table)
 	}
 
-	res.loader = buildLoader(res.enableCache, res.noGapFill)
+	table.gapCh = make(chan Gap)
+	table.currentLoader = buildLoader(table.baseLoader, table.gapCh,
+		table.enableCache, table.schema)
 
-	return &res
+	return table
 }
 
 // Stream returns a StreamClient that streams events from the db.
@@ -188,7 +198,7 @@ func (t *EventsTable) Stream(ctx context.Context, dbc *sql.DB, after string,
 		dbc:     dbc,
 		ctx:     ctx,
 		options: t.options,
-		loader:  t.loader,
+		loader:  t.currentLoader,
 	}
 
 	for _, o := range opts {
@@ -206,11 +216,35 @@ func (t *EventsTable) ToStream(dbc *sql.DB, opts1 ...reflex.StreamOption) reflex
 	}
 }
 
+// ListenGaps adds f to a slice of functions that are called when a gap is detected.
+// One first call, it starts a goroutine that serves these functions.
+func (t *EventsTable) ListenGaps(f func(Gap)) {
+	t.gapMu.Lock()
+	defer t.gapMu.Unlock()
+	if len(t.gapFns) == 0 {
+		// Start serving gaps.
+		eventsGapListenGauge.WithLabelValues(t.schema.name).Set(1)
+		go func() {
+			for gap := range t.gapCh {
+				t.gapMu.Lock()
+				for _, f := range t.gapFns {
+					f(gap)
+				}
+				t.gapMu.Unlock()
+			}
+		}()
+	}
+	t.gapFns = append(t.gapFns, f)
+}
+
 // buildLoader returns a new layered event loader.
-func buildLoader(enableCache, noGapFill bool) eventsLoader {
-	loader := makeIncrementLoader(noGapFill)
+func buildLoader(baseLoader Loader, ch chan<- Gap, enableCache bool, schema etableSchema) Loader {
+	if baseLoader == nil {
+		baseLoader = makeBaseLoader(schema)
+	}
+	loader := wrapGapDetector(baseLoader, ch, schema.name)
 	if enableCache {
-		loader = wrapRCache(loader)
+		loader = newRCache(loader, schema.name).Load
 	}
 	return wrapNoopFilter(loader)
 }
@@ -237,18 +271,18 @@ type streamclient struct {
 
 	schema etableSchema
 	after  string
-	lastID int64
+	prev   int64 // Previous (current) cursor.
 	buf    []*reflex.Event
 	dbc    *sql.DB
 	ctx    context.Context
 
 	// loader queries next events from the DB.
-	loader eventsLoader
+	loader Loader
 }
 
 // Recv blocks and returns the next event in the stream. It queries the db
-// in batches caching the results. If the cache is not empty is pops one
-// event and returns it. When querying if no new events are found it backs off
+// in batches buffering the results. If the buffer is not empty is pops one
+// event and returns it. When querying and no new events are found it backs off
 // before retrying. It blocks until it can return a non-nil event or an error.
 // It is only safe for a single goroutine to call Recv.
 func (s *streamclient) Recv() (*reflex.Event, error) {
@@ -259,13 +293,13 @@ func (s *streamclient) Recv() (*reflex.Event, error) {
 	// Initialise cursor s.LastID once.
 	var err error
 	if s.StreamFromHead {
-		s.lastID, err = getLatestID(s.ctx, s.dbc, s.schema)
+		s.prev, err = getLatestID(s.ctx, s.dbc, s.schema)
 		if err != nil {
 			return nil, err
 		}
 		s.StreamFromHead = false
 	} else if s.after != "" {
-		s.lastID, err = strconv.ParseInt(s.after, 10, 64)
+		s.prev, err = strconv.ParseInt(s.after, 10, 64)
 		if err != nil {
 			return nil, ErrInvalidIntID
 		}
@@ -274,20 +308,24 @@ func (s *streamclient) Recv() (*reflex.Event, error) {
 
 	for len(s.buf) == 0 {
 		eventsPollCounter.WithLabelValues(s.schema.name).Inc()
-		el, err := s.loader(s.ctx, s.dbc, s.schema, s.lastID, s.Lag)
+		el, next, err := s.loader(s.ctx, s.dbc, s.prev, s.Lag)
 		if err != nil {
 			return nil, err
-		} else if len(el) == 0 {
-			if err := s.wait(s.backoff); err != nil {
-				return nil, err
-			}
-			continue
 		}
 
+		s.prev = next
 		s.buf = el
+
+		if len(el) > 0 {
+			break
+		}
+
+		if err := s.wait(s.backoff); err != nil {
+			return nil, err
+		}
 	}
 	e := s.buf[0]
-	s.lastID = e.IDInt()
+	s.prev = e.IDInt()
 	s.buf = s.buf[1:]
 	return e, nil
 }
@@ -304,100 +342,6 @@ func (s *streamclient) wait(d time.Duration) error {
 		return nil
 	case <-s.ctx.Done():
 		return s.ctx.Err()
-	}
-}
-
-type eventsLoader func(ctx context.Context, dbc *sql.DB, schema etableSchema, after int64, lag time.Duration) ([]*reflex.Event, error)
-
-// wrapNoopFilter returns a loader that filters out all noop events returned
-// by the provided loader. Noops are required to ensure at-least-once event consistency for
-// event streams in the face of long running transactions. Consumers however
-// should not have to handle the special noop case.
-func wrapNoopFilter(loader eventsLoader) eventsLoader {
-	return func(ctx context.Context, dbc *sql.DB, schema etableSchema,
-		after int64, lag time.Duration) (events []*reflex.Event, e error) {
-		for {
-			el, err := loader(ctx, dbc, schema, after, lag)
-			if err != nil {
-				return nil, err
-			}
-			if len(el) == 0 {
-				// No new events
-				return nil, nil
-			}
-			var res []*reflex.Event
-			for _, e := range el {
-				if isNoopEvent(e) {
-					continue
-				}
-				res = append(res, e)
-			}
-			if len(res) > 0 {
-				return res, nil
-			}
-			// Only noops found, skip them and try again.
-			after += int64(len(el))
-		}
-	}
-}
-
-// makeIncrementLoader returns an incrementLoader that loads monotonically incremental
-// events (backed by auto increment int column). All events after `after` and before any
-// gap is returned. Gaps may be permanent, due to rollbacks, or temporary due to uncommitted
-// transactions. Noop events are inserted into permanent gaps, unless noGapFill which will result
-// in the stream blocking until the gap is filled by another. Temporary gaps return empty results
-// after a timeout. This implies that streams block on uncommitted transactions.
-func makeIncrementLoader(noGapFill bool) eventsLoader {
-	return func(ctx context.Context, dbc *sql.DB, schema etableSchema, after int64,
-		lag time.Duration) ([]*reflex.Event, error) {
-
-		el, err := getNextEvents(ctx, dbc, schema, after, lag)
-		if err != nil {
-			return nil, err
-		} else if len(el) == 0 {
-			return nil, nil
-		}
-
-		first := el[0]
-		if !first.IsIDInt() {
-			return nil, ErrInvalidIntID
-		}
-		if after != 0 && first.IDInt() != after+1 {
-			// Gap between after and first detected, so try to fill it.
-
-			if noGapFill {
-				// May not attempt to insert noops, only option is to wait for someone else to do it.
-				return nil, nil
-			}
-
-			err := fillGap(ctx, dbc, schema, after+1)
-			if isMySQLErrCantWrite(err) {
-				// Cannot insert noops, only option is to wait for someone else to do it.
-				// Disable write attempts with option WithEventsReadOnlyStream.
-				log.Info(ctx, "Reflex stream waiting, "+
-					"since cannot insert noop", j.KS("table", schema.name))
-				return nil, nil
-			} else if err != nil {
-				return nil, err
-			}
-
-			// Gap filled, retry now.
-			return makeIncrementLoader(noGapFill)(ctx, dbc, schema, after, lag)
-		}
-
-		prev := after
-		for i, e := range el {
-			if !e.IsIDInt() {
-				return nil, ErrInvalidIntID
-			}
-			if prev != 0 && e.IDInt() != prev+1 {
-				// Gap detected, return everything before it (maybe the gap is gone on next load).
-				return el[:i], nil
-			}
-
-			prev = e.IDInt()
-		}
-		return el, nil
 	}
 }
 

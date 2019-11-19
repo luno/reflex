@@ -21,6 +21,8 @@ func TestGapRollbackDetection(t *testing.T) {
 	dbc, close := ConnectAndCloseTestDB(t, eventsTable, "")
 	defer close()
 
+	table.ListenGaps(rsql.NewGapFiller(dbc, table).Fill)
+
 	// Insert 1
 	err := insertTestEvent(dbc, table, i2s(1), testEventType(1))
 	require.NoError(t, err)
@@ -104,6 +106,8 @@ func TestNoDeadlockGap(t *testing.T) {
 
 	dbc, close := ConnectAndCloseTestDB(t, eventsTable, "")
 	defer close()
+
+	table.ListenGaps(rsql.NewGapFiller(dbc, table).Fill)
 
 	// Insert 1
 	err := insertTestEvent(dbc, table, i2s(1), testEventType(1))
@@ -253,8 +257,9 @@ func TestNoGapFill(t *testing.T) {
 	notifier := new(mockNotifier)
 
 	table := rsql.NewEventsTable(name,
-		rsql.WithEventsNoGapFill(),
 		rsql.WithEventsNotifier(notifier))
+
+	// Not registering any gap filler.
 
 	// Insert 1
 	err := insertTestEvent(dbc, table, i2s(1), testEventType(1))
@@ -299,6 +304,8 @@ func TestDoubleGap(t *testing.T) {
 
 	dbc, close := ConnectAndCloseTestDB(t, eventsTable, "")
 	defer close()
+
+	table.ListenGaps(rsql.NewGapFiller(dbc, table).Fill)
 
 	// Insert 1
 	err := insertTestEvent(dbc, table, i2s(1), testEventType(1))
@@ -346,6 +353,8 @@ func TestRandomGaps(t *testing.T) {
 
 	dbc, close := ConnectAndCloseTestDB(t, eventsTable, "")
 	defer close()
+
+	table.ListenGaps(rsql.NewGapFiller(dbc, table).Fill)
 
 	// Insert 1 (will stream after this)
 	err := insertTestEvent(dbc, table, i2s(1), testEventType(1))

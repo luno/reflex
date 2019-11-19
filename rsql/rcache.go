@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/luno/jettison/errors"
-	"github.com/luno/jettison/j"
 	"github.com/luno/reflex"
 )
 
@@ -19,22 +18,17 @@ type rcache struct {
 	cache []*reflex.Event
 	mu    sync.RWMutex
 
-	loader eventsLoader
+	name   string
+	loader Loader
 	limit  int
 }
 
-// wrapRCache returns the event loader wrapped by a rcache.
-func wrapRCache(loader eventsLoader) eventsLoader {
-	return (&rcache{
+// newRCache returns a new read-through cache.
+func newRCache(loader Loader, name string) *rcache {
+	return &rcache{
+		name:   name,
 		loader: loader,
 		limit:  defaultRCacheLimit,
-	}).GetNextEvents
-}
-
-func NewRCacheForTesting(loader eventsLoader, limit int) *rcache {
-	return &rcache{
-		loader: loader,
-		limit:  limit,
 	}
 }
 
@@ -66,16 +60,16 @@ func (c *rcache) tailUnsafe() int64 {
 	return c.cache[len(c.cache)-1].IDInt()
 }
 
-func (c *rcache) GetNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
-	after int64, lag time.Duration) ([]*reflex.Event, error) {
+func (c *rcache) Load(ctx context.Context, dbc *sql.DB,
+	after int64, lag time.Duration) ([]*reflex.Event, int64, error) {
 
 	if res, ok := c.maybeHit(after+1, lag); ok {
-		rcacheHitsCounter.WithLabelValues(schema.name).Inc()
-		return res, nil
+		rcacheHitsCounter.WithLabelValues(c.name).Inc()
+		return res, getLastID(res), nil
 	}
 
-	rcacheMissCounter.WithLabelValues(schema.name).Inc()
-	return c.readThrough(ctx, dbc, schema, after, lag)
+	rcacheMissCounter.WithLabelValues(c.name).Inc()
+	return c.readThrough(ctx, dbc, after, lag)
 }
 
 func (c *rcache) maybeHit(from int64, lag time.Duration) ([]*reflex.Event, bool) {
@@ -111,35 +105,39 @@ func (c *rcache) maybeHitUnsafe(from int64, lag time.Duration) ([]*reflex.Event,
 	return res, true
 }
 
-var ErrConsecEvent = errors.New("non-consecutive event ids", j.C("ERR_bc3dcacb92b9761f"))
-
 // readThrough returns the next events from the DB as well as updating the cache.
-func (c *rcache) readThrough(ctx context.Context, dbc *sql.DB, schema etableSchema,
-	after int64, lag time.Duration) ([]*reflex.Event, error) {
+func (c *rcache) readThrough(ctx context.Context, dbc *sql.DB,
+	after int64, lag time.Duration) ([]*reflex.Event, int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Recheck cache after waiting for lock
 	if res, ok := c.maybeHitUnsafe(after+1, lag); ok {
-		return res, nil
+		return res, getLastID(res), nil
 	}
 
-	res, err := c.loader(ctx, dbc, schema, after, lag)
+	res, next, err := c.loader(ctx, dbc, after, lag)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	if len(res) == 0 {
+		return nil, after, nil
 	}
 
-	// Validate consecutive event ids
+	// Sanity check: Validate consecutive event ids and next cursor.
 	for i := 1; i < len(res); i++ {
 		if res[i].IDInt() != res[i-1].IDInt()+1 {
-			return nil, ErrConsecEvent
+			return nil, 0, ErrConsecEvent
 		}
+	}
+	if next != res[len(res)-1].IDInt() {
+		return nil, 0, errors.Wrap(ErrNextCursorMismatch, "")
 	}
 
 	c.maybeUpdateUnsafe(res)
 	c.maybeTrimUnsafe()
 
-	return res, nil
+	return res, next, nil
 }
 
 func (c *rcache) maybeUpdateUnsafe(el []*reflex.Event) {
@@ -175,4 +173,11 @@ func (c *rcache) maybeTrimUnsafe() {
 		offset := c.lenUnsafe() - c.limit
 		c.cache = c.cache[offset:]
 	}
+}
+
+func getLastID(el []*reflex.Event) int64 {
+	if len(el) == 0 {
+		return 0
+	}
+	return el[len(el)-1].IDInt()
 }

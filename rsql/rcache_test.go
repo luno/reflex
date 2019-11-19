@@ -36,13 +36,15 @@ func TestGap(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			q := newQ()
-			c := NewRCacheForTesting(q.q, rCacheLimit)
+			c := newRCache(q.Load, "test")
+			c.limit = rCacheLimit
 
 			q.addEvents(3)
 
-			res, err := c.GetNextEvents(nil, nil, etableSchema{}, 0, 0)
+			res, next, err := c.Load(nil, nil, 0, 0)
 			assert.NoError(t, err)
 			assert.Len(t, res, 3)
+			assert.Equal(t, int(next), 3)
 			q.assertTotal(t, 1)
 			q.assertQuery(t, 0, 1)
 			assert.Equal(t, 3, c.Len())
@@ -50,7 +52,7 @@ func TestGap(t *testing.T) {
 			for _, e := range test.add {
 				q.events = append(q.events, &reflex.Event{ID: i2s(e)})
 			}
-			_, err = c.GetNextEvents(nil, nil, etableSchema{}, 3, 0)
+			_, _, err = c.Load(nil, nil, 3, 0)
 			if test.err == "" {
 				require.NoError(t, err)
 			} else {
@@ -161,22 +163,25 @@ func TestRCache(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			q := newQ()
-			c := NewRCacheForTesting(q.q, rCacheLimit)
+			c := newRCache(q.Load, "test")
+			c.limit = rCacheLimit
 
 			q.addEvents(test.add1)
 
-			res, err := c.GetNextEvents(nil, nil, etableSchema{}, test.q1, 0)
+			res, next, err := c.Load(nil, nil, test.q1, 0)
 			assert.NoError(t, err)
 			assert.Len(t, res, test.len1)
+			assert.Equal(t, int(next), test.add1)
 			q.assertTotal(t, test.total1)
 			q.assertQuery(t, test.q1, test.q1Count)
 			assert.Equal(t, test.cLen1, c.Len())
 
 			q.addEvents(test.add2)
 
-			res, err = c.GetNextEvents(nil, nil, etableSchema{}, test.q2, 0)
+			res, next, err = c.Load(nil, nil, test.q2, 0)
 			assert.NoError(t, err)
 			assert.Len(t, res, test.len2)
+			assert.Equal(t, int(next), test.add1+test.add2)
 			q.assertTotal(t, test.total2)
 			q.assertQuery(t, test.q2, test.q2Count)
 			assert.Equal(t, test.cLen2, c.Len())
@@ -215,20 +220,15 @@ func (q *query) assertQuery(t *testing.T, lastID int64, count int) {
 	assert.Equal(t, count, q.queried[lastID])
 }
 
-func (q *query) q(ctx context.Context, dbc *sql.DB, schema etableSchema,
-	after int64, lag time.Duration) (events []*reflex.Event, e error) {
+func (q *query) Load(ctx context.Context, dbc *sql.DB, after int64,
+	lag time.Duration) ([]*reflex.Event, int64, error) {
 
 	q.queried[after]++
 
 	if len(q.events) <= int(after) {
-		return nil, nil
+		return nil, 0, nil
 	}
-	return q.events[after:], nil
-}
-
-func s2i(s string) int64 {
-	id, _ := strconv.ParseInt(s, 10, 64)
-	return id
+	return q.events[after:], getLastID(q.events), nil
 }
 
 func i2s(i int64) string {

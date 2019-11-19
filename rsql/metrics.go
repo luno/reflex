@@ -17,6 +17,27 @@ var (
 		Help:      "Total number of get next events queries performed per table",
 	}, []string{"table"})
 
+	eventsGapDetectCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "reflex",
+		Subsystem: "events_table",
+		Name:      "gap_detected_total",
+		Help:      "Total number of gaps detected while streaming events",
+	}, []string{"table"})
+
+	eventsGapFilledCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "reflex",
+		Subsystem: "events_table",
+		Name:      "gap_filled_total",
+		Help:      "Total number of gaps filled",
+	}, []string{"table"})
+
+	eventsGapListenGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "reflex",
+		Subsystem: "events_table",
+		Name:      "gap_listening",
+		Help:      "Wether or not any gap listeners have been registered.",
+	}, []string{"table"})
+
 	rcacheHitsCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "reflex",
 		Subsystem: "events_table",
@@ -41,4 +62,6 @@ func init() {
 	prometheus.MustRegister(eventsPollCounter)
 	prometheus.MustRegister(rcacheHitsCounter)
 	prometheus.MustRegister(rcacheMissCounter)
+	prometheus.MustRegister(eventsGapDetectCounter)
+	prometheus.MustRegister(eventsGapFilledCounter)
 }
