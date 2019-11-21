@@ -49,8 +49,12 @@ func TestStream(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Use mocks to improve speed
-			s := setupState(t, nil, nil)
+			// Use mock table for speed
+			mock := new(mockTable)
+			s := setupState(t, nil, []rsql.EventsOption{
+				rsql.WithEventsInserter(mock.Insert),
+				rsql.WithEventsLoader(mock.Load),
+			})
 			defer s.stop()
 
 			// Skip 0 since that results in noop event.
@@ -150,76 +154,77 @@ func TestConsumeStreamClient(t *testing.T) {
 	}
 }
 
-// TODO(corver): Re-enable this.
+func TestStreamClientErrors(t *testing.T) {
+	// use mock table since temp DB tables are dropped on first context cancel.
+	// Use mock table for speed
+	mock := new(mockTable)
+	s := setupState(t, nil, []rsql.EventsOption{
+		rsql.WithEventsInserter(mock.Insert),
+		rsql.WithEventsLoader(mock.Load),
+	})
+	defer s.stop()
 
-//func TestStreamClientErrors(t *testing.T) {
-//	// use mock tables since temp DB tables are dropped on first context cancel.
-//	s := setupState(t, nil, nil)
-//	defer s.stop()
-//
-//	// Skip 0 since it is a noop.
-//	for i := 1; i <= 10; i++ {
-//		err := insertTestEvent(s.dbc, s.etable, i2s(i), testEventType(i))
-//		assert.NoError(t, err)
-//	}
-//
-//	errNOK := errors.New("nok", j.C("ERR_NOK"))
-//	mocks := []error{errNOK, nil, nil, errNOK}
-//	var calls []*reflex.Event
-//	f := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
-//		calls = append(calls, e)
-//		err := mocks[0]
-//		mocks = mocks[1:]
-//		return err
-//	}
-//	// cache stream client
-//	var sc reflex.StreamClient
-//	streamFunc := func(ctx context.Context, after string, ol ...reflex.StreamOption) (reflex.StreamClient, error) {
-//		var err error
-//		sc, err = s.client.StreamEvents(ctx, after, ol...)
-//		return sc, err
-//	}
-//
-//	// error consumer
-//	ctx := context.Background()
-//	consumer := reflex.NewConsumer(reflex.ConsumerName("cid"), f)
-//	consumable := reflex.NewConsumable(streamFunc, s.ctable.ToStore(s.dbc))
-//	err := consumable.Consume(ctx, consumer)
-//
-//	jtest.Require(t, errNOK, err)
-//	assert.Len(t, calls, 1)
-//	assert.Nil(t, ctx.Err()) // parent context not cancelled
-//	assert.Equal(t, int64(1), calls[0].IDInt())
-//	assert.Equal(t, int64(1), calls[0].ForeignIDInt())
-//	//assert.Equal(t, 1, s.ctable.(*mockCTable).flushed)
-//
-//	// assert grpc stream also cancelled (it is async so wait)
-//	waitFor(t, time.Second, func() bool {
-//		_, err := sc.Recv()
-//		if err != nil {
-//			assert.Errorf(t, err, "context canceled")
-//			return true
-//		}
-//		return false
-//	})
-//
-//	// try again
-//	calls = []*reflex.Event{}
-//	ctx = context.Background()
-//	err = consumable.Consume(ctx, consumer)
-//
-//	jtest.Require(t, errNOK, err)
-//	require.Len(t, calls, 3)
-//	require.Nil(t, ctx.Err()) // parent context not cancelled
-//	//assert.Equal(t, 2, s.ctable.(*mockCTable).flushed)
-//
-//	for i := 0; i < 3; i++ {
-//		res := calls[i]
-//		require.Equal(t, i+1, res.Type.ReflexType())
-//		require.Equal(t, int64(i+1), res.ForeignIDInt())
-//		require.Equal(t, int64(i+1), res.IDInt())
-//	}
-//}
+	// Skip 0 since it is a noop.
+	for i := 1; i <= 10; i++ {
+		err := insertTestEvent(s.dbc, s.etable, i2s(i), testEventType(i))
+		assert.NoError(t, err)
+	}
+
+	errNOK := errors.New("nok", j.C("ERR_NOK"))
+	mocks := []error{errNOK, nil, nil, errNOK}
+	var calls []*reflex.Event
+	f := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+		calls = append(calls, e)
+		err := mocks[0]
+		mocks = mocks[1:]
+		return err
+	}
+	// cache stream client
+	var sc reflex.StreamClient
+	streamFunc := func(ctx context.Context, after string, ol ...reflex.StreamOption) (reflex.StreamClient, error) {
+		var err error
+		sc, err = s.client.StreamEvents(ctx, after, ol...)
+		return sc, err
+	}
+
+	// error consumer
+	ctx := context.Background()
+	consumer := reflex.NewConsumer(reflex.ConsumerName("cid"), f)
+	consumable := reflex.NewConsumable(streamFunc, s.ctable.ToStore(s.dbc))
+	err := consumable.Consume(ctx, consumer)
+
+	jtest.Require(t, errNOK, err)
+	assert.Len(t, calls, 1)
+	assert.Nil(t, ctx.Err()) // parent context not cancelled
+	assert.Equal(t, int64(1), calls[0].IDInt())
+	assert.Equal(t, int64(1), calls[0].ForeignIDInt())
+
+	// assert grpc stream also cancelled (it is async so wait)
+	waitFor(t, time.Second, func() bool {
+		_, err := sc.Recv()
+		if err != nil {
+			assert.Errorf(t, err, "context canceled")
+			return true
+		}
+		return false
+	})
+
+	// try again
+	calls = []*reflex.Event{}
+	ctx = context.Background()
+	err = consumable.Consume(ctx, consumer)
+
+	jtest.Require(t, errNOK, err)
+	require.Len(t, calls, 3)
+	require.Nil(t, ctx.Err()) // parent context not cancelled
+
+	for i := 0; i < 3; i++ {
+		res := calls[i]
+		require.Equal(t, i+1, res.Type.ReflexType())
+		require.Equal(t, int64(i+1), res.ForeignIDInt())
+		require.Equal(t, int64(i+1), res.IDInt())
+	}
+}
 
 func TestConsumeStreamLag(t *testing.T) {
 	s := setupState(t, nil,

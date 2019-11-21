@@ -19,12 +19,12 @@ type rcache struct {
 	mu    sync.RWMutex
 
 	name   string
-	loader Loader
+	loader loader
 	limit  int
 }
 
 // newRCache returns a new read-through cache.
-func newRCache(loader Loader, name string) *rcache {
+func newRCache(loader loader, name string) *rcache {
 	return &rcache{
 		name:   name,
 		loader: loader,

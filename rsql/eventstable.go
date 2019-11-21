@@ -34,6 +34,10 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 		o(table)
 	}
 
+	if table.inserter == nil {
+		table.inserter = makeDefaultInserter(table.schema)
+	}
+
 	table.gapCh = make(chan Gap)
 	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.enableCache, table.schema)
 
@@ -114,13 +118,30 @@ func WithEventsBackoff(d time.Duration) EventsOption {
 	}
 }
 
-// WithEventsLoader provides an option to set the base event loader.
+// WithEventsLoader provides an option to set the base event loader function.
+// The base event loader loads events returns the next available events and
+// the associated next cursor after the previous cursor or an error.
 // The default loader is configured with the WithEventsXField options.
-func WithEventsLoader(loader Loader) EventsOption {
+func WithEventsLoader(loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
+	lag time.Duration) (events []*reflex.Event, nextCursor int64, err error)) EventsOption {
 	return func(table *EventsTable) {
 		table.baseLoader = loader
 	}
 }
+
+// WithEventsInserter provides an option to set the event inserter
+// which inserts event into a sql table. The default inserter is
+// configured with the WithEventsXField options.
+func WithEventsInserter(inserter func(ctx context.Context, tx *sql.Tx,
+	foreignID string, typ reflex.EventType, metadata []byte) error) EventsOption {
+	return func(table *EventsTable) {
+		table.inserter = inserter
+	}
+}
+
+// inserter abstracts the insertion of an event into a sql table.
+type inserter func(ctx context.Context, tx *sql.Tx,
+	foreignID string, typ reflex.EventType, metadata []byte) error
 
 // EventsTable provides reflex event insertion and streaming
 // for a sql db table.
@@ -128,10 +149,11 @@ type EventsTable struct {
 	options
 	schema      etableSchema
 	enableCache bool
-	baseLoader  Loader
+	baseLoader  loader
+	inserter    inserter
 
 	// Stateful fields not cloned
-	currentLoader Loader
+	currentLoader loader
 	gapCh         chan Gap
 	gapFns        []func(Gap)
 	gapMu         sync.Mutex
@@ -159,7 +181,7 @@ func (t *EventsTable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreig
 	if isNoop(foreignID, typ) {
 		return nil, errors.New("inserting invalid noop event")
 	}
-	err := insertEvent(ctx, tx, t.schema, foreignID, typ, metadata)
+	err := t.inserter(ctx, tx, foreignID, typ, metadata)
 	if err != nil {
 		return noopFunc, err
 	}
@@ -178,6 +200,10 @@ func (t *EventsTable) Clone(opts ...EventsOption) *EventsTable {
 	}
 	for _, opt := range opts {
 		opt(table)
+	}
+
+	if table.inserter == nil {
+		table.inserter = makeDefaultInserter(table.schema)
 	}
 
 	table.gapCh = make(chan Gap)
@@ -238,7 +264,7 @@ func (t *EventsTable) ListenGaps(f func(Gap)) {
 }
 
 // buildLoader returns a new layered event loader.
-func buildLoader(baseLoader Loader, ch chan<- Gap, enableCache bool, schema etableSchema) Loader {
+func buildLoader(baseLoader loader, ch chan<- Gap, enableCache bool, schema etableSchema) loader {
 	if baseLoader == nil {
 		baseLoader = makeBaseLoader(schema)
 	}
@@ -277,7 +303,7 @@ type streamclient struct {
 	ctx    context.Context
 
 	// loader queries next events from the DB.
-	loader Loader
+	loader loader
 }
 
 // Recv blocks and returns the next event in the stream. It queries the db

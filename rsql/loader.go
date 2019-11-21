@@ -10,7 +10,7 @@ import (
 	"github.com/luno/reflex"
 )
 
-// Loader defines a function type for loading events from a sql db.
+// loader defines a function type for loading events from a sql db.
 // It returns the next available events and the associated next cursor
 // after the previous cursor or an error.
 // Loaders are layered as follows (from outer to inner):
@@ -18,12 +18,12 @@ import (
 //   rCache (if enable)
 //   gapDetector
 //   baseLoader
-type Loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
+type loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 	lag time.Duration) ([]*reflex.Event, int64, error)
 
 // makeBaseLoader returns the default base loader that queries the sql for next events.
 // This loader can be replaced with the WithBaseLoader option.
-func makeBaseLoader(schema etableSchema) Loader {
+func makeBaseLoader(schema etableSchema) loader {
 	return func(ctx context.Context, dbc *sql.DB,
 		prevCursor int64, lag time.Duration) ([]*reflex.Event, int64, error) {
 
@@ -48,7 +48,7 @@ func makeBaseLoader(schema etableSchema) Loader {
 // by the provided loader. Noops are required to ensure at-least-once event consistency for
 // event streams in the face of long running transactions. Consumers however
 // should not have to handle the special noop case.
-func wrapNoopFilter(loader Loader) Loader {
+func wrapNoopFilter(loader loader) loader {
 	return func(ctx context.Context, dbc *sql.DB,
 		prev int64, lag time.Duration) ([]*reflex.Event, int64, error) {
 
@@ -75,7 +75,7 @@ func wrapNoopFilter(loader Loader) Loader {
 // events (backed by auto increment int column). All events after `prev` cursor and before any
 // gap is returned. Gaps may be permanent, due to rollbacks, or temporary due to uncommitted
 // transactions. Detected gaps are sent on the channel.
-func wrapGapDetector(loader Loader, ch chan<- Gap, name string) Loader {
+func wrapGapDetector(loader loader, ch chan<- Gap, name string) loader {
 	return func(ctx context.Context, dbc *sql.DB, prev int64,
 		lag time.Duration) ([]*reflex.Event, int64, error) {
 

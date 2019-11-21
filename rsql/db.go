@@ -28,22 +28,25 @@ func (t eventType) ReflexType() int {
 	return int(t)
 }
 
-func insertEvent(ctx context.Context, tx *sql.Tx, schema etableSchema,
-	foreignID string, typ reflex.EventType, metadata []byte) error {
+// makeDefaultInserter returns the default sql inserter configured via WithEventsXField options.
+func makeDefaultInserter(schema etableSchema) inserter {
+	return func(ctx context.Context, tx *sql.Tx,
+		foreignID string, typ reflex.EventType, metadata []byte) error {
 
-	q := "insert into " + schema.name +
-		" set " + schema.foreignIDField + "=?, " + schema.timeField + "=now(), " + schema.typeField + "=?"
-	args := []interface{}{foreignID, typ.ReflexType()}
+		q := "insert into " + schema.name +
+			" set " + schema.foreignIDField + "=?, " + schema.timeField + "=now(), " + schema.typeField + "=?"
+		args := []interface{}{foreignID, typ.ReflexType()}
 
-	if schema.metadataField != "" {
-		q += ", " + schema.metadataField + "=?"
-		args = append(args, metadata)
-	} else if metadata != nil {
-		return errors.New("metadata not enabled")
+		if schema.metadataField != "" {
+			q += ", " + schema.metadataField + "=?"
+			args = append(args, metadata)
+		} else if metadata != nil {
+			return errors.New("metadata not enabled")
+		}
+
+		_, err := tx.ExecContext(ctx, q, args...)
+		return errors.Wrap(err, "insert error")
 	}
-
-	_, err := tx.ExecContext(ctx, q, args...)
-	return errors.Wrap(err, "insert error")
 }
 
 type row interface {

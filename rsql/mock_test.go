@@ -1,8 +1,13 @@
 package rsql_test
 
 import (
+	"context"
+	"database/sql"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/luno/reflex"
 )
 
 type mockNotifier struct {
@@ -42,4 +47,33 @@ func (m *mockNotifier) C() <-chan struct{} {
 
 	m.count++
 	return m.c
+}
+
+// mockTable provides a mock in-memory table implementing
+// both the loader and inserter functions. It does not
+// simulate gaps.
+type mockTable struct {
+	events []*reflex.Event
+}
+
+func (m *mockTable) Load(ctx context.Context, dbc *sql.DB, prevCursor int64,
+	lag time.Duration) ([]*reflex.Event, int64, error) {
+	for i, e := range m.events {
+		if e.IDInt() > prevCursor {
+			return m.events[i:], m.events[len(m.events)-1].IDInt(), nil
+		}
+	}
+	return nil, 0, nil
+}
+
+func (m *mockTable) Insert(ctx context.Context, tx *sql.Tx,
+	foreignID string, typ reflex.EventType, metadata []byte) error {
+	m.events = append(m.events, &reflex.Event{
+		ID:        fmt.Sprintf("%d", len(m.events)+1),
+		ForeignID: foreignID,
+		Timestamp: time.Now(),
+		Type:      typ,
+		MetaData:  metadata,
+	})
+	return nil
 }
