@@ -30,55 +30,56 @@ const (
 )
 
 type parallelConfig struct {
-	m            int
-	name         reflex.ConsumerName
+	n            int
+	name         string
 	streamOpts   []reflex.StreamOption
 	consumerOpts []reflex.ConsumerOption
 
-	hash    HashOption
-	handle  handleFn
-	consume reflex.ConsumeFunc
+	hash   HashOption
+	handle handleFn
 }
 
 type ParallelOption func(pc *parallelConfig)
 type getCtxFn = func(consumerName string) context.Context
 type handleFn = func(context.Context, fate.Fate, *reflex.Event) error
 
-// Parallel starts M consumers which consume the stream in parallel. Each event
+// Parallel starts N consumers which consume the stream in parallel. Each event
 // is consistently hashed to a consumer using the field specified in HashOption.
 // Role scheduling combined with an appropriate getCtxFn can be used to
 // implement distributed parallel consuming.
 //
-// NOTE: M should preferably be a power of 2, and modifying M will reset the
+// NOTE: N should preferably be a power of 2, and modifying N will reset the
 //       cursors.
-func Parallel(getCtx getCtxFn, name reflex.ConsumerName, m int,
-	consume reflex.ConsumeFunc, handle handleFn, opts ...ParallelOption) {
+func Parallel(getCtx getCtxFn, name string, n int, stream reflex.StreamFunc,
+	cstore reflex.CursorStore, handle handleFn, opts ...ParallelOption) {
 
 	conf := parallelConfig{
-		m:    m,
+		n:    n,
 		name: name,
 
-		hash:    HashOptionEventID,
-		handle:  handle,
-		consume: consume,
+		hash:   HashOptionEventID,
+		handle: handle,
 	}
 
 	for _, o := range opts {
 		o(&conf)
 	}
 
-	for i := 0; i < m; i++ {
+	for i := 0; i < n; i++ {
 		consumerM := conf.makeConsumer(i)
 		gcf := func() context.Context {
-			return getCtx(consumerM.Name().String())
+			return getCtx(consumerM.Name())
 		}
 
-		go ConsumeForever(gcf, consume, consumerM, conf.streamOpts...)
+		spec := reflex.NewSpec(stream, cstore, consumerM, conf.streamOpts...)
+		go RunForever(gcf, spec)
 	}
 }
 
-func (pc *parallelConfig) makeConsumer(n int) reflex.Consumer {
-	name := fmt.Sprintf("%s_%d_of_%d", pc.name, n+1, pc.m)
+// makeConsumer returns consumer m-of-n that will only process events
+// that hash to it.
+func (pc *parallelConfig) makeConsumer(m int) reflex.Consumer {
+	name := fmt.Sprintf("%s_%d_of_%d", pc.name, m+1, pc.n)
 	hasher := fnv.New32()
 
 	f := func(ctx context.Context, fate fate.Fate, event *reflex.Event) error {
@@ -104,14 +105,14 @@ func (pc *parallelConfig) makeConsumer(n int) reflex.Consumer {
 		}
 
 		hash := hasher.Sum32()
-		if hash%uint32(pc.m) != uint32(n) {
+		if hash%uint32(pc.n) != uint32(m) {
 			return nil
 		}
 
 		return pc.handle(ctx, fate, event)
 	}
 
-	return reflex.NewConsumer(reflex.ConsumerName(name), f, pc.consumerOpts...)
+	return reflex.NewConsumer(name, f, pc.consumerOpts...)
 }
 
 func WithStreamOpts(opts ...reflex.StreamOption) ParallelOption {

@@ -20,13 +20,10 @@ const (
 	EventTypeUpdate  ExEventType = 2
 )
 
-type ExConsumerName = reflex.ConsumerName
-
 const (
-	ConsumerNameUnknown          ExConsumerName = "unknown"
-	ConsumerNameInternalLoop     ExConsumerName = "internal_exserver_loop"
-	ConsumerNameInternalConsumer ExConsumerName = "internal_exclient_consumer"
-	ConsumerNameExternalConsumer ExConsumerName = "external_exclient_consumer"
+	ConsumerNameInternalLoop     = "internal_exserver_loop"
+	ConsumerNameInternalConsumer = "internal_exclient_consumer"
+	ConsumerNameExternalConsumer = "external_exclient_consumer"
 )
 
 type Client interface {

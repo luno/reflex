@@ -14,7 +14,7 @@ type StreamClientPB interface {
 	Recv() (*reflexpb.Event, error)
 }
 
-// WrapStreamPB wraps a gRPC client's Stream method and returns a StreamFunc.
+// WrapStreamPB wraps a gRPC client's stream method and returns a StreamFunc.
 func WrapStreamPB(wrap func(context.Context, *reflexpb.StreamRequest) (
 	StreamClientPB, error)) StreamFunc {
 	return func(ctx context.Context, after string, opts ...StreamOption) (StreamClient, error) {

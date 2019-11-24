@@ -233,7 +233,7 @@ func NewReflexClient(cc *grpc.ClientConn) ReflexClient {
 }
 
 func (c *reflexClient) Stream(ctx context.Context, in *StreamRequest, opts ...grpc.CallOption) (Reflex_StreamClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Reflex_serviceDesc.Streams[0], "/reflexpb.Reflex/Stream", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Reflex_serviceDesc.Streams[0], "/reflexpb.Reflex/stream", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +300,7 @@ var _Reflex_serviceDesc = grpc.ServiceDesc{
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Stream",
+			StreamName:    "stream",
 			Handler:       _Reflex_Stream_Handler,
 			ServerStreams: true,
 		},

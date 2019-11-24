@@ -77,12 +77,12 @@ func TestBootstrap(t *testing.T) {
 			b := new(bootstrapMock)
 			b.gets = test.gets
 			b.events = ItoEList(test.inEvents...)
-			consumable := rpatterns.NewBootstrapConsumable(b.Stream, b)
+			spec := rpatterns.NewBootstrapSpec(b.Stream, b, consumer)
 
-			err := consumable.Consume(context.Background(), consumer)
+			err := reflex.Run(context.Background(), spec)
 			assert.EqualError(t, err, test.consumerErr1)
 
-			err = consumable.Consume(context.Background(), consumer)
+			err = reflex.Run(context.Background(), spec)
 			assert.EqualError(t, err, test.consumerErr2)
 
 			assert.EqualValues(t, test.sets, b.sets)

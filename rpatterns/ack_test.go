@@ -37,9 +37,13 @@ func TestAck(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
+			events := ItoEList(test.inEvents...)
+			b := new(bootstrapMock)
+			b.gets = []string{""}
+			b.events = events
 
 			var results []*reflex.Event
-			consumer := rpatterns.NewAckConsumer("test",
+			consumer := rpatterns.NewAckConsumer("test", b,
 				func(ctx context.Context, f fate.Fate, e *rpatterns.AckEvent) error {
 					results = append(results, &e.Event)
 					for _, id := range test.acks {
@@ -49,13 +53,9 @@ func TestAck(t *testing.T) {
 					}
 					return nil
 				})
-			events := ItoEList(test.inEvents...)
-			b := new(bootstrapMock)
-			b.gets = []string{""}
-			b.events = events
-			ackConsume := rpatterns.NewAckConsume(b.Stream, b)
 
-			err := ackConsume(context.Background(), consumer)
+			req := rpatterns.NewAckSpec(b.Stream, consumer)
+			err := reflex.Run(context.Background(), req)
 			assert.EqualError(t, err, "recv error: no more events")
 
 			assert.EqualValues(t, test.acks, b.sets)
@@ -73,14 +73,15 @@ func TestAckExample(t *testing.T) {
 	b.gets = []string{""}
 	b.events = events
 
-	ackConsume := rpatterns.NewAckConsume(b.Stream, b)
-	err := ackConsume(context.Background(), makeBatcher())
+	batcher := makeBatcher(b)
+	req := rpatterns.NewAckSpec(b.Stream, batcher)
+	err := reflex.Run(context.Background(), req)
 	assert.EqualError(t, err, "recv error: no more events")
 	assert.EqualValues(t, []string{"2", "4", "6"}, b.sets)
 }
 
 // makeBatcher returns a simple batch processor.
-func makeBatcher() rpatterns.AckConsumer {
+func makeBatcher(cstore reflex.CursorStore) *rpatterns.AckConsumer {
 	var (
 		batch     []rpatterns.AckEvent
 		batchSize = 2
@@ -101,5 +102,5 @@ func makeBatcher() rpatterns.AckConsumer {
 		return nil
 	}
 
-	return rpatterns.NewAckConsumer("batcher", f)
+	return rpatterns.NewAckConsumer("batcher", cstore, f)
 }

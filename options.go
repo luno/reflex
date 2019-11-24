@@ -4,8 +4,9 @@ import (
 	"time"
 )
 
+// StreamOptions provide options sent to the event stream source.
 type StreamOptions struct {
-	// lag defines the duration after an event is created before it becomes
+	// Lag defines the duration after an event is created before it becomes
 	// eligible for streaming.
 	Lag time.Duration
 
@@ -14,10 +15,11 @@ type StreamOptions struct {
 	StreamFromHead bool
 }
 
+// StreamOption defines a functional option that configures StreamOptions.
 type StreamOption func(*StreamOptions)
 
 // WithStreamFromHead provides an option to stream only new events from
-// from the head of events table. Note this overrides the lastID parameter.
+// from the head of events table. Note this overrides the "after" parameter.
 func WithStreamFromHead() StreamOption {
 	return func(sc *StreamOptions) {
 		sc.StreamFromHead = true

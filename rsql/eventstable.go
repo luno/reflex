@@ -213,8 +213,8 @@ func (t *EventsTable) Clone(opts ...EventsOption) *EventsTable {
 	return table
 }
 
-// Stream returns a StreamClient that streams events from the db.
-// It is only safe for a single goroutine to use.
+// Stream implements reflex.StreamFunc and returns a StreamClient that
+// streams events from the db. It is only safe for a single goroutine to use.
 func (t *EventsTable) Stream(ctx context.Context, dbc *sql.DB, after string,
 	opts ...reflex.StreamOption) reflex.StreamClient {
 
@@ -430,7 +430,7 @@ func (n *inmemNotifier) C() <-chan struct{} {
 // inserted in an EventsTable, and a way to trigger an EventsTable's
 // StreamClients when there are new events available.
 type EventsNotifier interface {
-	// StreamWatcher is passed as the default StreamWatcher every time Stream()
+	// StreamWatcher is passed as the default StreamWatcher every time stream()
 	// is called on the EventsTable.
 	StreamWatcher
 

@@ -13,7 +13,7 @@ const defaultActivityTTL = 24 * time.Hour
 
 type consumer struct {
 	fn          func(context.Context, fate.Fate, *Event) error
-	name        ConsumerName
+	name        string
 	lagAlert    time.Duration
 	activityTTL time.Duration
 
@@ -44,10 +44,10 @@ func WithConsumerActivityTTL(ttl time.Duration) ConsumerOption {
 }
 
 // NewConsumer returns a new instrumented consumer of events.
-func NewConsumer(name ConsumerName, fn func(context.Context, fate.Fate, *Event) error,
+func NewConsumer(name string, fn func(context.Context, fate.Fate, *Event) error,
 	opts ...ConsumerOption) Consumer {
 
-	labels := prometheus.Labels{consumerLabel: name.String()}
+	labels := prometheus.Labels{consumerLabel: name}
 
 	c := &consumer{
 		fn:            fn,
@@ -69,7 +69,7 @@ func NewConsumer(name ConsumerName, fn func(context.Context, fate.Fate, *Event) 
 	return c
 }
 
-func (c *consumer) Name() ConsumerName {
+func (c *consumer) Name() string {
 	return c.name
 }
 

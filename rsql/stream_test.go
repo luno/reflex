@@ -130,7 +130,7 @@ func TestConsumeStreamClient(t *testing.T) {
 				cancel()
 			}()
 
-			consumer := reflex.NewConsumer(reflex.ConsumerName(test.name), f)
+			consumer := reflex.NewConsumer(test.name, f)
 			consumable := reflex.NewConsumable(s.client.StreamEvents, s.ctable.ToStore(s.dbc))
 			err := consumable.Consume(ctx, consumer)
 			d := time.Now().Sub(t0)
@@ -189,7 +189,7 @@ func TestStreamClientErrors(t *testing.T) {
 
 	// error consumer
 	ctx := context.Background()
-	consumer := reflex.NewConsumer(reflex.ConsumerName("cid"), f)
+	consumer := reflex.NewConsumer("cid", f)
 	consumable := reflex.NewConsumable(streamFunc, s.ctable.ToStore(s.dbc))
 	err := consumable.Consume(ctx, consumer)
 
@@ -286,7 +286,7 @@ func TestConsumeStreamLag(t *testing.T) {
 		cancel()
 	}()
 
-	consumer := reflex.NewConsumer(reflex.ConsumerName("test"), f)
+	consumer := reflex.NewConsumer("test", f)
 	consumable := reflex.NewConsumable(s.client.StreamEvents, s.ctable.ToStore(s.dbc),
 		reflex.WithStreamLag(time.Minute))
 	err := consumable.Consume(ctx, consumer)

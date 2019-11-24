@@ -91,13 +91,12 @@ func TestParallel(t *testing.T) {
 				return nil
 			}
 
-			consumable := reflex.NewConsumable(cursors.Stream, cursors)
 			getCtx := func(n string) context.Context {
 				return context.WithValue(context.Background(), "thread", n)
 			}
 
-			rpatterns.Parallel(getCtx, "parallel_test", test.m,
-				consumable.Consume, fn, rpatterns.WithHashOption(test.hash))
+			rpatterns.Parallel(getCtx, "parallel_test", test.m, cursors.Stream,
+				cursors, fn, rpatterns.WithHashOption(test.hash))
 
 			wg.Wait()
 

@@ -43,7 +43,7 @@ func (s *Server) maybeErrStopped() error {
 	}
 }
 
-// Stream streams events for a gRPC Stream method. It always returns a non-nil error.
+// Stream streams events for a gRPC stream method. It always returns a non-nil error.
 // It returns ErrStopped if the server is stopped.
 // Note that back pressure is achieved by gRPC Streams' 64KB send and receive buffers.
 // Note that gRPC does not guarantee buffered messages being sent on the wire, see

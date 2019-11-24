@@ -60,7 +60,7 @@ func TestConsumable(t *testing.T) {
 			outEvents:   []int{1, 2, 3, 4},
 			fErrors:     []error{nil, nil, nil, doneErr},
 			finalCursor: 3,
-			outErrMsg:   "consumer error: done",
+			outErrMsg:   "consume error: done",
 			timeout:     false,
 		}, {
 			name:           "basic with end error",
@@ -85,7 +85,7 @@ func TestConsumable(t *testing.T) {
 			outEvents:   []int{1, 2},
 			fErrors:     []error{nil, doneErr},
 			finalCursor: 1,
-			outErrMsg:   "consumer error: done",
+			outErrMsg:   "consume error: done",
 			timeout:     false,
 		},
 	}

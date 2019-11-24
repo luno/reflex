@@ -2,12 +2,8 @@ package rpatterns
 
 import (
 	"context"
-	"time"
 
 	"github.com/luno/fate"
-	"github.com/luno/jettison"
-	"github.com/luno/jettison/errors"
-	"github.com/luno/jettison/log"
 	"github.com/luno/reflex"
 )
 
@@ -16,13 +12,13 @@ import (
 type AckEvent struct {
 	reflex.Event
 	cstore       reflex.CursorStore
-	consumerName reflex.ConsumerName
+	consumerName string
 }
 
 // Ack sets (and flushes) the event id to the underlying cursor store.
 // Note that out-of-order acks is allowed but should be avoided.
 func (e *AckEvent) Ack(ctx context.Context) error {
-	err := e.cstore.SetCursor(ctx, e.consumerName.String(), e.ID)
+	err := e.cstore.SetCursor(ctx, e.consumerName, e.ID)
 	if err != nil {
 		return err
 	}
@@ -32,59 +28,46 @@ func (e *AckEvent) Ack(ctx context.Context) error {
 // AckConsumer mirrors the reflex consumer except that events need to be acked
 // explicitly. Ex. if processing batches, only the last event in the batch
 // should be acked.
-type AckConsumer interface {
-	Name() reflex.ConsumerName
-	Consume(context.Context, fate.Fate, *AckEvent) error
-}
-
-// AckConsumeFunc blocks and streams events to the AckConsumer, only updating the
-// cursor when events are acked. It always returns a non-nil error.
-type AckConsumeFunc func(context.Context, AckConsumer, ...reflex.StreamOption) error
-
-// NewAckConsume returns a consume function for a AckConsumer which requires
-// explicit acks to update the cursor store. This is useful if events are processed
-// in batches.
-func NewAckConsume(stream reflex.StreamFunc, cstore reflex.CursorStore,
-	copts ...reflex.ConsumerOption) AckConsumeFunc {
-
-	return func(ctx context.Context, ackConsumer AckConsumer,
-		sopts ...reflex.StreamOption) error {
-
-		adapter := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
-			ackEvent := &AckEvent{
-				Event:        *e,
-				cstore:       cstore,
-				consumerName: ackConsumer.Name(),
-			}
-			return ackConsumer.Consume(ctx, f, ackEvent)
-		}
-		consumer := reflex.NewConsumer(ackConsumer.Name(), adapter, copts...)
-		consumable := reflex.NewConsumable(stream, &noSetStore{cstore: cstore})
-
-		return consumable.Consume(ctx, consumer, sopts...)
-	}
-}
-
-type ackConsumer struct {
-	name    reflex.ConsumerName
+type AckConsumer struct {
+	name    string
 	consume func(context.Context, fate.Fate, *AckEvent) error
+	cstore  reflex.CursorStore
+	opts    []reflex.ConsumerOption
 }
 
-func (c *ackConsumer) Name() reflex.ConsumerName {
+// Name returns the ack consumer name.
+func (c *AckConsumer) Name() string {
 	return c.name
 }
 
-func (c *ackConsumer) Consume(ctx context.Context, f fate.Fate, e *AckEvent) error {
-	return c.consume(ctx, f, e)
+// Consume executes the consumer business logic, converting the reflex event
+// to an AckEvent.
+func (c *AckConsumer) Consume(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+	return c.consume(ctx, f, &AckEvent{
+		Event:        *e,
+		cstore:       c.cstore,
+		consumerName: c.name,
+	})
 }
 
 // NewAckConsumer returns a new AckConsumer.
-func NewAckConsumer(name reflex.ConsumerName,
-	consume func(context.Context, fate.Fate, *AckEvent) error) AckConsumer {
-	return &ackConsumer{
+func NewAckConsumer(name string, cstore reflex.CursorStore,
+	consume func(context.Context, fate.Fate, *AckEvent) error,
+	opts ...reflex.ConsumerOption) *AckConsumer {
+	return &AckConsumer{
 		name:    name,
+		cstore:  cstore,
 		consume: consume,
+		opts:    opts,
 	}
+}
+
+// NewAckSpec returns a reflex spec for the AckConsumer.
+func NewAckSpec(stream reflex.StreamFunc, ac *AckConsumer,
+	opts ...reflex.StreamOption) reflex.Spec {
+
+	c := reflex.NewConsumer(ac.name, ac.Consume)
+	return reflex.NewSpec(stream, &noSetStore{ac.cstore}, c, opts...)
 }
 
 type noSetStore struct {
@@ -102,24 +85,4 @@ func (s *noSetStore) SetCursor(ctx context.Context, consumerName string, cursor 
 
 func (s *noSetStore) Flush(ctx context.Context) error {
 	return s.cstore.Flush(ctx)
-}
-
-// AckConsumeForever continuously runs the ack consume function, backing off
-// and logging on unexpected errors.
-func AckConsumeForever(getCtx func() context.Context, consume AckConsumeFunc,
-	consumer AckConsumer, opts ...reflex.StreamOption) {
-	for {
-		ctx := getCtx()
-
-		err := consume(ctx, consumer, opts...)
-		if errors.Is(err, context.Canceled) || reflex.IsStoppedErr(err) {
-			// Just retry on expected errors.
-			time.Sleep(time.Millisecond * 100) // Don't spin
-			continue
-		}
-
-		log.Error(ctx, errors.Wrap(err, "ack consume forever error"),
-			jettison.WithKeyValueString("consumer", consumer.Name().String()))
-		time.Sleep(time.Minute) // 1 min backoff on errors
-	}
 }

@@ -8,41 +8,6 @@ import (
 	"github.com/luno/fate"
 )
 
-// EventType is an interface for enums that act as reflex event types.
-type EventType interface {
-	// ReflexType returns the type as an int.
-	ReflexType() int
-}
-
-// IsType returns true if the source reflex type equals the target type.
-func IsType(source, target EventType) bool {
-	return source.ReflexType() == target.ReflexType()
-}
-
-// IsAnyType returns true if the source reflex type equals any of the target types.
-func IsAnyType(source EventType, targets ...EventType) bool {
-	for _, target := range targets {
-		if source.ReflexType() == target.ReflexType() {
-			return true
-		}
-	}
-	return false
-}
-
-// eventType is the internal implementation of EventType interface.
-type eventType int
-
-func (t eventType) ReflexType() int {
-	return int(t)
-}
-
-// ConsumerName is a string type used for naming consumer.
-type ConsumerName string
-
-func (c ConsumerName) String() string {
-	return string(c)
-}
-
 // Event is the reflex event. It is an immutable notification event that indicates that
 // a change of a some type relating a foreign entity happened at a specific time. It may also
 // contain metadata relating to the change.
@@ -78,11 +43,67 @@ func (e *Event) IsForeignIDInt() bool {
 	return err == nil
 }
 
+// EventType is an interface for enums that act as reflex event types.
+type EventType interface {
+	// ReflexType returns the type as an int.
+	ReflexType() int
+}
+
+// IsType returns true if the source reflex type equals the target type.
+func IsType(source, target EventType) bool {
+	return source.ReflexType() == target.ReflexType()
+}
+
+// IsAnyType returns true if the source reflex type equals any of the target types.
+func IsAnyType(source EventType, targets ...EventType) bool {
+	for _, target := range targets {
+		if source.ReflexType() == target.ReflexType() {
+			return true
+		}
+	}
+	return false
+}
+
+// eventType is the internal implementation of EventType interface.
+type eventType int
+
+func (t eventType) ReflexType() int {
+	return int(t)
+}
+
+// Spec specifies all the elements required to stream and consume reflex events
+// for a specific purpose. StreamFunc is the source of the events. Consumer is
+// the business logic consuming the events. CursorStore persists a cursor of
+// consumed events. As long as the elements do not change the consumer is
+// guaranteed at-least-once delivery of all events in the stream.
+type Spec struct {
+	stream   StreamFunc
+	cstore   CursorStore
+	consumer Consumer
+	opts     []StreamOption
+}
+
+// Name returns the name of the spec which is the name of the consumer.
+func (req Spec) Name() string {
+	return req.consumer.Name()
+}
+
+// NewSpec returns a new Spec.
+func NewSpec(stream StreamFunc, cstore CursorStore, consumer Consumer,
+	opts ...StreamOption) Spec {
+	return Spec{
+		stream:   stream,
+		cstore:   cstore,
+		consumer: consumer,
+		opts:     opts,
+	}
+}
+
 // Consumer represents a piece of business logic that consumes events.
 // It consists of a name and the consume logic. Consumer logic should be idempotent
 // since reflex provides at-least-once event delivery.
 type Consumer interface {
-	Name() ConsumerName
+	Name() string
 	Consume(context.Context, fate.Fate, *Event) error
 }
 
@@ -99,11 +120,13 @@ type StreamFunc func(ctx context.Context, after string, opts ...StreamOption) (S
 // ConsumeFunc is the main reflex consume interface. It blocks while events are
 // streamed to consumer. It always returns a non-nil error. Cancel the context
 // to return early.
+// Deprecated: Please use Spec.
 type ConsumeFunc func(context.Context, Consumer, ...StreamOption) error
 
-// Consumable is an interface for an object that provides a ConsumeFunc with the name Consume.
+// Consumable is an interface for an object that provides a ConsumeFunc with the name Run.
+// Deprecated: Please use Spec.
 type Consumable interface {
-	// Consume blocks while events are streamed to consumer. It always returns a non-nil error.
+	// Run blocks while events are streamed to consumer. It always returns a non-nil error.
 	// Cancel the context to return early.
 	Consume(context.Context, Consumer, ...StreamOption) error
 }
