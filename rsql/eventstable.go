@@ -263,6 +263,11 @@ func (t *EventsTable) ListenGaps(f func(Gap)) {
 	t.gapFns = append(t.gapFns, f)
 }
 
+// getSchema returns the table schema and implements the gapTable interface for FillGaps.
+func (t *EventsTable) getSchema() etableSchema {
+	return t.schema
+}
+
 // buildLoader returns a new layered event loader.
 func buildLoader(baseLoader loader, ch chan<- Gap, enableCache bool, schema etableSchema) loader {
 	if baseLoader == nil {

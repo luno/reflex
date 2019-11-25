@@ -21,35 +21,37 @@ type Gap struct {
 	Next int64
 }
 
-// NewGapFiller returns a new gap filler for the events table.
+// FillGaps registers the default gap filler with the events table. It
+// inserts noops into the events table when gaps are detected. Both
+// EventsTable and EventsTableInt satisfy the gapTable internal interface.
 //   Usage:
 //   var events = rsql.NewEventsTable()
 //   ...
-//   events.ListenGaps(req.NewGapFiller(dbc, events).Fill)
-func NewGapFiller(dbc *sql.DB, table *EventsTable) *GapFiller {
-	return &GapFiller{
-		schema: table.schema,
-		dbc:    dbc,
-	}
+//   rsql.FillGaps(dbc, events)
+func FillGaps(dbc *sql.DB, gapTable gapTable) {
+	gapTable.ListenGaps(makeFill(dbc, gapTable.getSchema()))
 }
 
-// GapFiller provides a default implementation for filling gaps
-// in an event table. It should be used with EventsTable.ListenGaps.
-type GapFiller struct {
-	schema etableSchema
-	dbc    *sql.DB
+// gapTable is a common interface between EventsTable and EventsTableInt
+// defining the subset of methods required for gap filling.
+type gapTable interface {
+	ListenGaps(f func(Gap))
+	getSchema() etableSchema
 }
 
-// Fill ensures that rows exist with the ids indicated by the Gap.
-// It does so by either detecting existing rows or by inserting
-// noop events. It is idempotent.
-func (g GapFiller) Fill(gap Gap) {
-	ctx := context.Background()
-	for i := gap.Prev + 1; i < gap.Next; i++ {
-		err := fillGap(ctx, g.dbc, g.schema, i)
-		if err != nil {
-			log.Error(ctx, errors.Wrap(err, "errors filling gap", j.MKV{"table": g.schema.name}))
-			return
+// makeFill returns a fill function that ensures that rows exist
+// with the ids indicated by the Gap. It does so by either detecting
+// existing rows or by inserting noop events. It is idempotent.
+func makeFill(dbc *sql.DB, schema etableSchema) func(Gap) {
+	return func(gap Gap) {
+		ctx := context.Background()
+		for i := gap.Prev + 1; i < gap.Next; i++ {
+			err := fillGap(ctx, dbc, schema, i)
+			if err != nil {
+				log.Error(ctx, errors.Wrap(err, "errors filling gap",
+					j.MKV{"table": schema.name, "id": i}))
+				return
+			}
 		}
 	}
 }
