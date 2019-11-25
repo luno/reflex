@@ -64,4 +64,5 @@ func init() {
 	prometheus.MustRegister(rcacheMissCounter)
 	prometheus.MustRegister(eventsGapDetectCounter)
 	prometheus.MustRegister(eventsGapFilledCounter)
+	prometheus.MustRegister(eventsGapListenGauge)
 }
