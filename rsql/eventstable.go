@@ -41,8 +41,6 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	table.gapCh = make(chan Gap)
 	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.enableCache, table.schema)
 
-	eventsGapListenGauge.WithLabelValues(table.schema.name) // Init zero gap filling gauge.
-
 	return table
 }
 
@@ -230,6 +228,8 @@ func (t *EventsTable) Stream(ctx context.Context, dbc *sql.DB, after string,
 	for _, o := range opts {
 		o(&sc.StreamOptions)
 	}
+
+	eventsGapListenGauge.WithLabelValues(t.schema.name) // Init zero gap filling gauge.
 
 	return sc
 }
