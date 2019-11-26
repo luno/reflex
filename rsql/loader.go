@@ -104,7 +104,7 @@ func wrapGapDetector(loader loader, ch chan<- Gap, name string) loader {
 			id1 := e.IDInt()
 			if id0 != 0 && id1 != id0+1 {
 				// Gap detected, return everything before it.
-				eventsGapDetectCounter.WithLabelValues(name)
+				eventsGapDetectCounter.WithLabelValues(name).Inc()
 				select {
 				case ch <- Gap{Prev: id0, Next: id1}:
 				default:
