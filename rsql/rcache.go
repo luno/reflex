@@ -61,15 +61,15 @@ func (c *rcache) tailUnsafe() int64 {
 }
 
 func (c *rcache) Load(ctx context.Context, dbc *sql.DB,
-	after int64, lag time.Duration) ([]*reflex.Event, int64, error) {
+	prev int64, lag time.Duration) ([]*reflex.Event, int64, error) {
 
-	if res, ok := c.maybeHit(after+1, lag); ok {
+	if res, ok := c.maybeHit(prev+1, lag); ok {
 		rcacheHitsCounter.WithLabelValues(c.name).Inc()
-		return res, getLastID(res), nil
+		return res, getNextCursor(res, prev), nil
 	}
 
 	rcacheMissCounter.WithLabelValues(c.name).Inc()
-	return c.readThrough(ctx, dbc, after, lag)
+	return c.readThrough(ctx, dbc, prev, lag)
 }
 
 func (c *rcache) maybeHit(from int64, lag time.Duration) ([]*reflex.Event, bool) {
@@ -107,21 +107,21 @@ func (c *rcache) maybeHitUnsafe(from int64, lag time.Duration) ([]*reflex.Event,
 
 // readThrough returns the next events from the DB as well as updating the cache.
 func (c *rcache) readThrough(ctx context.Context, dbc *sql.DB,
-	after int64, lag time.Duration) ([]*reflex.Event, int64, error) {
+	prev int64, lag time.Duration) ([]*reflex.Event, int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Recheck cache after waiting for lock
-	if res, ok := c.maybeHitUnsafe(after+1, lag); ok {
-		return res, getLastID(res), nil
+	if res, ok := c.maybeHitUnsafe(prev+1, lag); ok {
+		return res, getNextCursor(res, prev), nil
 	}
 
-	res, next, err := c.loader(ctx, dbc, after, lag)
+	res, next, err := c.loader(ctx, dbc, prev, lag)
 	if err != nil {
 		return nil, 0, err
 	}
 	if len(res) == 0 {
-		return nil, after, nil
+		return nil, prev, nil
 	}
 
 	// Sanity check: Validate consecutive event ids and next cursor.
@@ -175,9 +175,9 @@ func (c *rcache) maybeTrimUnsafe() {
 	}
 }
 
-func getLastID(el []*reflex.Event) int64 {
+func getNextCursor(el []*reflex.Event, prevCursor int64) int64 {
 	if len(el) == 0 {
-		return 0
+		return prevCursor
 	}
 	return el[len(el)-1].IDInt()
 }

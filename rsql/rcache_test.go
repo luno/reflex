@@ -220,15 +220,16 @@ func (q *query) assertQuery(t *testing.T, lastID int64, count int) {
 	assert.Equal(t, count, q.queried[lastID])
 }
 
-func (q *query) Load(ctx context.Context, dbc *sql.DB, after int64,
+func (q *query) Load(ctx context.Context, dbc *sql.DB, prev int64,
 	lag time.Duration) ([]*reflex.Event, int64, error) {
 
-	q.queried[after]++
+	q.queried[prev]++
 
-	if len(q.events) <= int(after) {
+	if len(q.events) <= int(prev) {
 		return nil, 0, nil
 	}
-	return q.events[after:], getLastID(q.events), nil
+	el := q.events[prev:]
+	return el, getNextCursor(el, prev), nil
 }
 
 func i2s(i int64) string {

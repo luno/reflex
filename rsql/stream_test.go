@@ -409,6 +409,61 @@ func TestStreamMetadata(t *testing.T) {
 	}
 }
 
+func TestStreamLagCache(t *testing.T) {
+	notifier := new(mockNotifier)
+	s := setupState(t, nil,
+		[]rsql.EventsOption{
+			rsql.WithEventsCacheEnabled(),
+			rsql.WithEventsNotifier(notifier),
+			rsql.WithEventsBackoff(time.Hour), // Manual control on sleep.
+		})
+	defer s.stop()
+
+	// Insert 10 events, staggered 1 min apart
+	total := 10
+	for i := 1; i <= total; i++ {
+		err := insertTestEvent(s.dbc, s.etable, i2s(i), testEventType(i))
+		require.NoError(t, err)
+
+		ts := (total - i) * 60
+		_, err = s.dbc.Exec("update "+eventsTable+" set timestamp=date_sub(timestamp, interval ? second) where id=?", ts, i)
+		assert.NoError(t, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// First read all events into the cache.
+	sc1 := s.etable.Stream(ctx, s.dbc, "")
+	for i := 0; i < total; i++ {
+		_, err := sc1.Recv()
+		require.NoError(t, err)
+	}
+
+	// Then try again, but lag 5.5 min, so expect only 4 events.
+	lag := reflex.WithStreamLag(time.Second * (60*5 + 30))
+	sc2 := s.etable.Stream(ctx, s.dbc, "", lag)
+
+	for i := 0; i < 4; i++ {
+		_, err := sc2.Recv()
+		require.NoError(t, err)
+	}
+
+	// Next call should not return an event, but backoff and then we cancel.
+	go func() {
+		notifier.WaitForWatch()
+		// Trigger another read from the cache
+		notifier.Notify()
+		notifier.WaitForWatch()
+		// And then cancel
+		cancel()
+	}()
+
+	// We do not expect an event here.
+	_, err := sc2.Recv()
+	jtest.Assert(t, context.Canceled, err)
+}
+
 type teststate struct {
 	dbc    *sql.DB
 	etable *rsql.EventsTable

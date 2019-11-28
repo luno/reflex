@@ -12,14 +12,17 @@ import (
 
 // loader defines a function type for loading events from a sql db.
 // It returns the next available events and the associated next cursor
-// after the previous cursor or an error.
+// after the previous cursor or an error. Decoupling of the next cursor
+// from the returned events allows for events to be skipped if required
+// (like noops).
+//
 // Loaders are layered as follows (from outer to inner):
 //   noopFilter
 //   rCache (if enable)
 //   gapDetector
 //   baseLoader
 type loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
-	lag time.Duration) ([]*reflex.Event, int64, error)
+	lag time.Duration) (events []*reflex.Event, nextCursor int64, err error)
 
 // makeBaseLoader returns the default base loader that queries the sql for next events.
 // This loader can be replaced with the WithBaseLoader option.
