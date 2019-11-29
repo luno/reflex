@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/j"
 	"github.com/luno/reflex"
 )
 
@@ -120,8 +121,7 @@ func WithEventsBackoff(d time.Duration) EventsOption {
 // The base event loader loads events returns the next available events and
 // the associated next cursor after the previous cursor or an error.
 // The default loader is configured with the WithEventsXField options.
-func WithEventsLoader(loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
-	lag time.Duration) (events []*reflex.Event, nextCursor int64, err error)) EventsOption {
+func WithEventsLoader(loader loader) EventsOption {
 	return func(table *EventsTable) {
 		table.baseLoader = loader
 	}
@@ -130,8 +130,7 @@ func WithEventsLoader(loader func(ctx context.Context, dbc *sql.DB, prevCursor i
 // WithEventsInserter provides an option to set the event inserter
 // which inserts event into a sql table. The default inserter is
 // configured with the WithEventsXField options.
-func WithEventsInserter(inserter func(ctx context.Context, tx *sql.Tx,
-	foreignID string, typ reflex.EventType, metadata []byte) error) EventsOption {
+func WithEventsInserter(inserter inserter) EventsOption {
 	return func(table *EventsTable) {
 		table.inserter = inserter
 	}
@@ -151,7 +150,7 @@ type EventsTable struct {
 	inserter    inserter
 
 	// Stateful fields not cloned
-	currentLoader loader
+	currentLoader filterLoader
 	gapCh         chan Gap
 	gapFns        []func(Gap)
 	gapMu         sync.Mutex
@@ -269,7 +268,7 @@ func (t *EventsTable) getSchema() etableSchema {
 }
 
 // buildLoader returns a new layered event loader.
-func buildLoader(baseLoader loader, ch chan<- Gap, enableCache bool, schema etableSchema) loader {
+func buildLoader(baseLoader loader, ch chan<- Gap, enableCache bool, schema etableSchema) filterLoader {
 	if baseLoader == nil {
 		baseLoader = makeBaseLoader(schema)
 	}
@@ -308,7 +307,7 @@ type streamclient struct {
 	ctx    context.Context
 
 	// loader queries next events from the DB.
-	loader loader
+	loader filterLoader
 }
 
 // Recv blocks and returns the next event in the stream. It queries the db
@@ -321,7 +320,7 @@ func (s *streamclient) Recv() (*reflex.Event, error) {
 		return nil, err
 	}
 
-	// Initialise cursor s.LastID once.
+	// Initialise cursor s.prev once.
 	var err error
 	if s.StreamFromHead {
 		s.prev, err = getLatestID(s.ctx, s.dbc, s.schema)
@@ -329,6 +328,7 @@ func (s *streamclient) Recv() (*reflex.Event, error) {
 			return nil, err
 		}
 		s.StreamFromHead = false
+		s.after = "" // StreamFromHead overrides after.
 	} else if s.after != "" {
 		s.prev, err = strconv.ParseInt(s.after, 10, 64)
 		if err != nil {
@@ -339,25 +339,46 @@ func (s *streamclient) Recv() (*reflex.Event, error) {
 
 	for len(s.buf) == 0 {
 		eventsPollCounter.WithLabelValues(s.schema.name).Inc()
-		el, next, err := s.loader(s.ctx, s.dbc, s.prev, s.Lag)
+		el, override, err := s.loader(s.ctx, s.dbc, s.prev, s.Lag)
 		if err != nil {
 			return nil, err
 		}
 
-		s.prev = next
+		// Sanity check: override cursor if no events.
+		if override != 0 && len(el) > 0 {
+			return nil, errors.New("cursor override with events",
+				j.MKV{"prev": s.prev, "override": override})
+		} else if len(el) == 0 && s.prev != 0 && override == 0 {
+			return nil, errors.New("no cursor override and no events",
+				j.MKV{"prev": s.prev, "override": override})
+		}
+
 		s.buf = el
 
 		if len(el) > 0 {
 			break
 		}
 
+		s.prev = override
+
 		if err := s.wait(s.backoff); err != nil {
 			return nil, err
 		}
 	}
+
+	// Pop next event from buffer.
 	e := s.buf[0]
-	s.prev = e.IDInt()
 	s.buf = s.buf[1:]
+	next := e.IDInt()
+
+	// Sanity check: next cursor must be greater than prev
+	if s.prev >= next {
+		return nil, errors.Wrap(ErrConsecEvent, "pop error",
+			j.MKV{"prev": s.prev, "next": next})
+	}
+
+	s.prev = next
+
 	return e, nil
 }
 

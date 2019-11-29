@@ -57,13 +57,13 @@ type mockTable struct {
 }
 
 func (m *mockTable) Load(ctx context.Context, dbc *sql.DB, prevCursor int64,
-	lag time.Duration) ([]*reflex.Event, int64, error) {
+	lag time.Duration) ([]*reflex.Event, error) {
 	for i, e := range m.events {
 		if e.IDInt() > prevCursor {
-			return m.events[i:], m.events[len(m.events)-1].IDInt(), nil
+			return m.events[i:], nil
 		}
 	}
-	return nil, 0, nil
+	return nil, nil
 }
 
 func (m *mockTable) Insert(ctx context.Context, tx *sql.Tx,

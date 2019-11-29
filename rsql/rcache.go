@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/luno/jettison/errors"
 	"github.com/luno/reflex"
 )
 
@@ -61,11 +60,11 @@ func (c *rcache) tailUnsafe() int64 {
 }
 
 func (c *rcache) Load(ctx context.Context, dbc *sql.DB,
-	prev int64, lag time.Duration) ([]*reflex.Event, int64, error) {
+	prev int64, lag time.Duration) ([]*reflex.Event, error) {
 
 	if res, ok := c.maybeHit(prev+1, lag); ok {
 		rcacheHitsCounter.WithLabelValues(c.name).Inc()
-		return res, getNextCursor(res, prev), nil
+		return res, nil
 	}
 
 	rcacheMissCounter.WithLabelValues(c.name).Inc()
@@ -107,37 +106,34 @@ func (c *rcache) maybeHitUnsafe(from int64, lag time.Duration) ([]*reflex.Event,
 
 // readThrough returns the next events from the DB as well as updating the cache.
 func (c *rcache) readThrough(ctx context.Context, dbc *sql.DB,
-	prev int64, lag time.Duration) ([]*reflex.Event, int64, error) {
+	prev int64, lag time.Duration) ([]*reflex.Event, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Recheck cache after waiting for lock
 	if res, ok := c.maybeHitUnsafe(prev+1, lag); ok {
-		return res, getNextCursor(res, prev), nil
+		return res, nil
 	}
 
-	res, next, err := c.loader(ctx, dbc, prev, lag)
+	res, err := c.loader(ctx, dbc, prev, lag)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if len(res) == 0 {
-		return nil, prev, nil
+		return nil, nil
 	}
 
-	// Sanity check: Validate consecutive event ids and next cursor.
+	// Sanity check: Validate consecutive event ids.
 	for i := 1; i < len(res); i++ {
 		if res[i].IDInt() != res[i-1].IDInt()+1 {
-			return nil, 0, ErrConsecEvent
+			return nil, ErrConsecEvent
 		}
-	}
-	if next != res[len(res)-1].IDInt() {
-		return nil, 0, errors.Wrap(ErrNextCursorMismatch, "")
 	}
 
 	c.maybeUpdateUnsafe(res)
 	c.maybeTrimUnsafe()
 
-	return res, next, nil
+	return res, nil
 }
 
 func (c *rcache) maybeUpdateUnsafe(el []*reflex.Event) {
@@ -173,11 +169,4 @@ func (c *rcache) maybeTrimUnsafe() {
 		offset := c.lenUnsafe() - c.limit
 		c.cache = c.cache[offset:]
 	}
-}
-
-func getNextCursor(el []*reflex.Event, prevCursor int64) int64 {
-	if len(el) == 0 {
-		return prevCursor
-	}
-	return el[len(el)-1].IDInt()
 }
