@@ -66,7 +66,7 @@ func NewAckConsumer(name string, cstore reflex.CursorStore,
 func NewAckSpec(stream reflex.StreamFunc, ac *AckConsumer,
 	opts ...reflex.StreamOption) reflex.Spec {
 
-	c := reflex.NewConsumer(ac.name, ac.Consume)
+	c := reflex.NewConsumer(ac.name, ac.Consume, ac.opts...)
 	return reflex.NewSpec(stream, &noSetStore{ac.cstore}, c, opts...)
 }
 
