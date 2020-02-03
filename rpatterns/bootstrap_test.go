@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
@@ -96,17 +98,21 @@ func TestBootstrap(t *testing.T) {
 }
 
 type bootstrapMock struct {
+	mu sync.Mutex
+
 	gets []string
 	sets []string
 
-	events  []*reflex.Event
-	opts    []reflex.StreamOption
-	afters  []string
-	flushes int
+	events     []*reflex.Event
+	emptyDelay time.Duration
+	opts       []reflex.StreamOption
+	afters     []string
+	flushes    int
 }
 
 func (b *bootstrapMock) Recv() (*reflex.Event, error) {
 	if len(b.events) == 0 {
+		time.Sleep(b.emptyDelay)
 		return nil, errEvents
 	}
 	e := b.events[0]
@@ -124,16 +130,25 @@ func (b *bootstrapMock) GetCursor(ctx context.Context, consumerName string) (str
 }
 
 func (b *bootstrapMock) SetCursor(ctx context.Context, consumerName string, cursor string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	b.sets = append(b.sets, cursor)
 	return nil
 }
 
 func (b *bootstrapMock) Flush(ctx context.Context) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	b.flushes++
 	return nil
 }
 
 func (b *bootstrapMock) Stream(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	b.opts = append(b.opts, opts...)
 	b.afters = append(b.afters, after)
 	return b, nil

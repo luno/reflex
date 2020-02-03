@@ -107,6 +107,12 @@ type Consumer interface {
 	Consume(context.Context, fate.Fate, *Event) error
 }
 
+// resetter is an optional interface that a consumer can implement indicating
+// that it is stateful and requires reset at the start of each run.
+type resetter interface {
+	Reset() error
+}
+
 // StreamClient is a stream interface providing subsequent events on calls to Recv.
 type StreamClient interface {
 	// Recv blocks until the next event is found. Either the event or error is non-nil.

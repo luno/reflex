@@ -2,7 +2,6 @@ package reflex
 
 import (
 	"context"
-
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 )
@@ -19,6 +18,14 @@ func Run(in context.Context, s Spec) error {
 	cursor, err := s.cstore.GetCursor(ctx, s.consumer.Name())
 	if err != nil {
 		return errors.Wrap(err, "get cursor error")
+	}
+
+	// Check if the consumer requires reset
+	if resetter, ok := s.consumer.(resetter); ok {
+		err := resetter.Reset()
+		if err != nil {
+			return errors.Wrap(err, "reset error")
+		}
 	}
 
 	sc, err := s.stream(ctx, cursor, s.opts...)
