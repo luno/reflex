@@ -122,10 +122,32 @@ type stream struct {
 	next     []byte
 	cursor   cursor
 	blobTime time.Time
+	reader   *blob.Reader
 	decoder  Decoder
+	err      error
 }
 
 func (s *stream) Recv() (*reflex.Event, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	e, err := s.recv()
+	if err != nil {
+		s.err = err
+		if s.reader != nil {
+			// Close current reader.
+			if err2 := s.reader.Close(); err2 != nil {
+				return nil, err2
+			}
+		}
+		return nil, err
+	}
+
+	return e, nil
+}
+
+func (s *stream) recv() (*reflex.Event, error) {
 	for s.cursor.Key == "" || s.cursor.Last {
 		// Starting from scratch or at end of a blob.
 		if err := s.loadNextBlob(); err != nil {
@@ -195,6 +217,7 @@ func (s *stream) loadCurrentBlob() error {
 		i++
 	}
 
+	s.reader = r
 	s.decoder = d
 	s.blobTime = r.ModTime()
 	s.next, err = d.Decode()
@@ -235,6 +258,14 @@ func (s *stream) loadNextBlob() error {
 			return err
 		}
 
+		if s.reader != nil {
+			// Close previous reader.
+			if err := s.reader.Close(); err != nil {
+				return err
+			}
+		}
+
+		s.reader = r
 		s.decoder = d
 		s.blobTime = r.ModTime()
 		s.cursor = cursor{
