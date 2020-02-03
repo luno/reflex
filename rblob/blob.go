@@ -142,7 +142,7 @@ func (s *stream) Recv() (*reflex.Event, error) {
 
 	temp, err := s.decoder.Decode()
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, err
+		return nil, errors.Wrap(err, "decode error")
 	}
 
 	s.cursor.Offset++
@@ -164,6 +164,7 @@ func (s *stream) Recv() (*reflex.Event, error) {
 // loadCurrentBlob loads the blob decoder for the current cursor.
 // It assumes the cursor is not at the end of the blob.
 func (s *stream) loadCurrentBlob() error {
+
 	if !s.blobTime.IsZero() {
 		return errors.New("loading current while time set")
 	}
