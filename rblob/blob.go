@@ -92,6 +92,10 @@ func (b *Bucket) Close() error {
 // streams events from bucket blobs after the provided cursor.
 // Stream is safe to call from multiple goroutines, but the returned
 // StreamClient is only safe for a single goroutine to use.
+//
+// Note: The returned StreamClient implementation also exposes a
+// Close method which releases underlying resources. Close is
+// called internally when Recv returns an error.
 func (b *Bucket) Stream(ctx context.Context, after string,
 	opts ...reflex.StreamOption) (reflex.StreamClient, error) {
 
@@ -113,6 +117,11 @@ func (b *Bucket) Stream(ctx context.Context, after string,
 	}, nil
 }
 
+var (
+	_ reflex.StreamClient = (*stream)(nil)
+	_ io.Closer           = (*stream)(nil)
+)
+
 type stream struct {
 	ctx         context.Context
 	bucket      *blob.Bucket
@@ -125,6 +134,23 @@ type stream struct {
 	reader   *blob.Reader
 	decoder  Decoder
 	err      error
+}
+
+// Close closes this stream and the current reader.
+// Subsequent calls to Close or Recv will return an error.
+func (s *stream) Close() error {
+	if s.err != nil {
+		// Already closed.
+		return s.err
+	}
+
+	s.err = errors.New("closed")
+
+	if s.reader == nil {
+		return nil
+	}
+
+	return s.reader.Close()
 }
 
 func (s *stream) Recv() (*reflex.Event, error) {

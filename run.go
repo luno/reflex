@@ -2,6 +2,8 @@ package reflex
 
 import (
 	"context"
+	"io"
+
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 )
@@ -20,7 +22,7 @@ func Run(in context.Context, s Spec) error {
 		return errors.Wrap(err, "get cursor error")
 	}
 
-	// Check if the consumer requires reset
+	// Check if the consumer requires reset.
 	if resetter, ok := s.consumer.(resetter); ok {
 		err := resetter.Reset()
 		if err != nil {
@@ -31,6 +33,11 @@ func Run(in context.Context, s Spec) error {
 	sc, err := s.stream(ctx, cursor, s.opts...)
 	if err != nil {
 		return err
+	}
+
+	// Check if the stream client is a closer.
+	if closer, ok := sc.(io.Closer); ok {
+		defer closer.Close()
 	}
 
 	for {
