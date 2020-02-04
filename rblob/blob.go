@@ -276,8 +276,12 @@ func (s *stream) loadNextBlob() error {
 		next, err := getNextKey(s.ctx, s.bucket, s.cursor.Key)
 		if errors.Is(err, io.EOF) {
 			// No next keys, wait.
-			time.Sleep(s.backoff)
-			continue
+			select {
+			case <-s.ctx.Done():
+				return s.ctx.Err()
+			case <-time.After(s.backoff):
+				continue
+			}
 		} else if err != nil {
 			return err
 		}

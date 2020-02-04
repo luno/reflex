@@ -125,3 +125,25 @@ func TestWaitForMore(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, exp, res)
 }
+
+func TestCancelWait(t *testing.T) {
+	dir, err := os.Getwd()
+	require.NoError(t, err)
+
+	url := "file:///" + path.Join(dir, "testdata")
+
+	// Wait forever if no files
+	s, err := rblob.OpenBucket(context.Background(), url,
+		rblob.WithBackoff(time.Hour))
+	require.NoError(t, err)
+	defer s.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	defer cancel()
+
+	sc, err := s.Stream(ctx, "2099|0|last")
+	require.NoError(t, err)
+
+	_, err = sc.Recv()
+	jtest.Require(t, context.DeadlineExceeded, err)
+}
