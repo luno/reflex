@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/reflex"
 	"gocloud.dev/blob"
@@ -33,7 +35,7 @@ func WithBackoff(d time.Duration) option {
 
 // WithDecoder returns a option to configure the blob content decoder
 // function. It defaults to the JSONDecoder.
-func WithDecoder(fn func(*blob.Reader) (Decoder, error)) option {
+func WithDecoder(fn func(io.Reader) (Decoder, error)) option {
 	return func(b *Bucket) {
 		b.decoderFunc = fn
 	}
@@ -45,11 +47,22 @@ type option func(*Bucket)
 //
 // URL defines the url of the blob bucket. See the gocloud
 // URLOpener documentation in driver subpackages for details
-// on supported URL formats, also https://gocloud.dev/concepts/urls/.
-func OpenBucket(ctx context.Context, url string,
+// on supported URL formats. Also see https://gocloud.dev/concepts/urls/
+// and https://gocloud.dev/howto/blob/.
+func OpenBucket(ctx context.Context, urlstr string,
 	opts ...option) (*Bucket, error) {
 
-	bucket, err := blob.OpenBucket(ctx, url)
+	u, err := url.Parse(urlstr)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse url string")
+	}
+
+	prefix := u.Query().Get("prefix")
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		return nil, errors.New("prefix should end with '/'")
+	}
+
+	bucket, err := blob.OpenBucket(ctx, urlstr)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +89,7 @@ func newBucket(bucket *blob.Bucket, opts ...option) *Bucket {
 // consecutive blobs as events.
 type Bucket struct {
 	bucket      *blob.Bucket
-	decoderFunc func(*blob.Reader) (Decoder, error)
+	decoderFunc func(io.Reader) (Decoder, error)
 	backoff     time.Duration
 
 	cursor  cursor
@@ -125,7 +138,7 @@ var (
 type stream struct {
 	ctx         context.Context
 	bucket      *blob.Bucket
-	decoderFunc func(*blob.Reader) (Decoder, error)
+	decoderFunc func(io.Reader) (Decoder, error)
 	backoff     time.Duration
 
 	next     []byte
@@ -318,16 +331,18 @@ func getNextKey(ctx context.Context, bucket *blob.Bucket, prev string) (string, 
 		if o.Key > prev {
 			return o.Key, nil
 		}
+		// TODO(corver): Add metrics for non-optimal listing.
 	}
 }
 
 // makeStartAfter returns a blob.BeforeList function that starts listing after
 // the provided key for improved performance when scanning large buckets.
-func makeStartAfter(key string) func(asFunc func(interface{}) bool) error {
+func makeStartAfter(key string) func(func(interface{}) bool) error {
 	return func(asFunc func(interface{}) bool) error {
-		var s3input *s3.ListObjectsV2Input
+		s3input := new(s3.ListObjectsV2Input)
 		if asFunc(&s3input) {
-			s3input.StartAfter = &key
+			after := path.Join(*s3input.Prefix, key)
+			s3input.StartAfter = &after
 		}
 		return nil
 	}

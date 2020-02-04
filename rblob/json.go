@@ -2,13 +2,12 @@ package rblob
 
 import (
 	"encoding/json"
-
-	"gocloud.dev/blob"
+	"io"
 )
 
 // JSONDecoder is the default decoder function that decodes blobs into
 // raw json byte slices.
-var JSONDecoder = func(r *blob.Reader) (Decoder, error) {
+var JSONDecoder = func(r io.Reader) (Decoder, error) {
 	return &jsonDecoder{
 		decoder: json.NewDecoder(r),
 	}, nil

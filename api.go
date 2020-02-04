@@ -117,6 +117,9 @@ type resetter interface {
 type StreamClient interface {
 	// Recv blocks until the next event is found. Either the event or error is non-nil.
 	Recv() (*Event, error)
+
+	// TODO(corver): Think about adding io.Closer explicitly
+	// to this interface rather than current optional checks.
 }
 
 // StreamFunc is the main reflex stream interface that all implementations should provide.

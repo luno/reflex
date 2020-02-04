@@ -9,6 +9,7 @@ import (
 
 	"github.com/luno/reflex/rblob"
 	"github.com/stretchr/testify/require"
+	_ "gocloud.dev/blob/s3blob" // Driver for test
 )
 
 var (
@@ -20,8 +21,8 @@ var (
 // event ids and metadata (content). It obtains the AWS session from the environment.
 //
 // Usage:
-//   export URL="s3://my_bucket/optional/prefix"
-//   export AFTER_ID="" # Set this to an event id to skip past it.
+//   export URL="s3://my_bucket?prefix=optional/prefix/"
+//   export AFTER_ID="" # Ex. set to '2020|0|last' to start from 2020 if first part of key is year.
 //   go test github.com/luno/reflex/rblob -v -run TestS3 -test_s3_url="$URL" -test_s3_after="$AFTER_ID"
 func TestS3(t *testing.T) {
 	if *s3url == "" {

@@ -2,6 +2,7 @@ package reflex
 
 import (
 	"context"
+	"io"
 	"log"
 	"strconv"
 
@@ -86,6 +87,11 @@ func (s *Server) Stream(sFn StreamFunc, req *reflexpb.StreamRequest, sspb stream
 // It always returns a non-nil error.
 func serveStream(ss streamServerPB, sc StreamClient) error {
 	ctx := ss.Context()
+
+	// Ensure close if stream client is a closer.
+	if closer, ok := sc.(io.Closer); ok {
+		defer closer.Close()
+	}
 
 	for {
 		if ctx.Err() != nil {
