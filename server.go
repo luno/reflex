@@ -3,10 +3,8 @@ package reflex
 import (
 	"context"
 	"io"
-	"log"
 	"strconv"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/reflex/reflexpb"
 )
@@ -121,30 +119,6 @@ func goChan(f func() error) <-chan error {
 		close(ch)
 	}()
 	return ch
-}
-
-// optsFromProto returns a slice of StreamOptions converted from the proto
-// message options. Conversion errors are unexpected, so only logged.
-func optsFromProto(options *reflexpb.StreamOptions) []StreamOption {
-	var opts []StreamOption
-	if options == nil {
-		return opts
-	}
-
-	if options.Lag != nil {
-		d, err := ptypes.Duration(options.Lag)
-		if err != nil {
-			log.Printf("reflex: Error parsing request option lag: %v", err)
-		} else {
-			opts = append(opts, WithStreamLag(d))
-		}
-	}
-
-	if options.FromHead {
-		opts = append(opts, WithStreamFromHead())
-	}
-
-	return opts
 }
 
 func awaitStop(ctx context.Context, stop <-chan struct{}) error {

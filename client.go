@@ -4,7 +4,6 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/luno/reflex/reflexpb"
 )
 
@@ -18,7 +17,7 @@ type StreamClientPB interface {
 func WrapStreamPB(wrap func(context.Context, *reflexpb.StreamRequest) (
 	StreamClientPB, error)) StreamFunc {
 	return func(ctx context.Context, after string, opts ...StreamOption) (StreamClient, error) {
-		optionspb, err := streamOptionsToProto(opts)
+		optionspb, err := optsToProto(opts)
 		if err != nil {
 			return nil, err
 		}
@@ -36,16 +35,4 @@ func WrapStreamPB(wrap func(context.Context, *reflexpb.StreamRequest) (
 
 		return streamClientFromProto(cspb), nil
 	}
-}
-
-func streamOptionsToProto(opts []StreamOption) (*reflexpb.StreamOptions, error) {
-	options := new(StreamOptions)
-	for _, o := range opts {
-		o(options)
-	}
-
-	return &reflexpb.StreamOptions{
-		Lag:      ptypes.DurationProto(options.Lag),
-		FromHead: options.StreamFromHead,
-	}, nil
 }

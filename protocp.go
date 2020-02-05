@@ -1,9 +1,11 @@
 package reflex
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/duration"
 	"github.com/luno/reflex/reflexpb"
 )
 
@@ -57,4 +59,45 @@ func (c streamclientpb) Recv() (*Event, error) {
 
 func streamClientFromProto(sc StreamClientPB) StreamClient {
 	return &streamclientpb{sc}
+}
+
+// optsFromProto returns a slice of StreamOptions converted from the proto
+// message options. Conversion errors are unexpected, so only logged.
+func optsFromProto(options *reflexpb.StreamOptions) []StreamOption {
+	var opts []StreamOption
+	if options == nil {
+		return opts
+	}
+
+	if options.Lag != nil {
+		d, err := ptypes.Duration(options.Lag)
+		if err != nil {
+			log.Printf("reflex: Error parsing request option lag: %v", err)
+		} else if d > 0 {
+			opts = append(opts, WithStreamLag(d))
+		}
+	}
+
+	if options.FromHead {
+		opts = append(opts, WithStreamFromHead())
+	}
+
+	return opts
+}
+
+func optsToProto(opts []StreamOption) (*reflexpb.StreamOptions, error) {
+	options := new(StreamOptions)
+	for _, o := range opts {
+		o(options)
+	}
+
+	var lag *duration.Duration
+	if options.Lag > 0 {
+		lag = ptypes.DurationProto(options.Lag)
+	}
+
+	return &reflexpb.StreamOptions{
+		Lag:      lag,
+		FromHead: options.StreamFromHead,
+	}, nil
 }
