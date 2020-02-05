@@ -12,6 +12,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/j"
+	"github.com/luno/jettison/log"
 	"github.com/luno/reflex"
 	"gocloud.dev/blob"
 )
@@ -24,24 +26,25 @@ type Decoder interface {
 	Decode() ([]byte, error)
 }
 
-// WithBackoff returns a option to configure the backoff duration
+// WithBackoff returns an option to configure the backoff duration
 // before querying the underlying bucket for new blobs. It defaults
 // to one minute.
-func WithBackoff(d time.Duration) option {
+func WithBackoff(d time.Duration) Option {
 	return func(b *Bucket) {
 		b.backoff = d
 	}
 }
 
-// WithDecoder returns a option to configure the blob content decoder
+// WithDecoder returns an option to configure the blob content decoder
 // function. It defaults to the JSONDecoder.
-func WithDecoder(fn func(io.Reader) (Decoder, error)) option {
+func WithDecoder(fn func(io.Reader) (Decoder, error)) Option {
 	return func(b *Bucket) {
 		b.decoderFunc = fn
 	}
 }
 
-type option func(*Bucket)
+// Option is a functional option that configures a bucket.
+type Option func(*Bucket)
 
 // OpenBucket opens and returns a bucket for the provided url.
 //
@@ -50,7 +53,7 @@ type option func(*Bucket)
 // on supported URL formats. Also see https://gocloud.dev/concepts/urls/
 // and https://gocloud.dev/howto/blob/.
 func OpenBucket(ctx context.Context, urlstr string,
-	opts ...option) (*Bucket, error) {
+	opts ...Option) (*Bucket, error) {
 
 	u, err := url.Parse(urlstr)
 	if err != nil {
@@ -67,22 +70,23 @@ func OpenBucket(ctx context.Context, urlstr string,
 		return nil, err
 	}
 
-	return newBucket(bucket, opts...), nil
+	return NewBucket(bucket, opts...), nil
 }
 
-func newBucket(bucket *blob.Bucket, opts ...option) *Bucket {
+// NewBucket returns a bucket using the provided underlying bucket.
+func NewBucket(bucket *blob.Bucket, opts ...Option) *Bucket {
 
-	s := &Bucket{
+	b := &Bucket{
 		bucket:      bucket,
 		decoderFunc: JSONDecoder,
 		backoff:     time.Minute,
 	}
 
 	for _, opt := range opts {
-		opt(s)
+		opt(b)
 	}
 
-	return s
+	return b
 }
 
 // Bucket defines a bucket from which to stream the content of
@@ -150,7 +154,7 @@ type stream struct {
 }
 
 // Close closes this stream and the current reader.
-// Subsequent calls to Close or Recv will return an error.
+// Subsequent calls to Close or Recv always return an error.
 func (s *stream) Close() error {
 	if s.err != nil {
 		// Already closed.
@@ -172,22 +176,25 @@ func (s *stream) Recv() (*reflex.Event, error) {
 	}
 
 	e, err := s.recv()
-	if err != nil {
-		s.err = err
-		if s.reader != nil {
-			// Close current reader.
-			if err2 := s.reader.Close(); err2 != nil {
-				return nil, err2
-			}
-		}
-		return nil, err
+	if err == nil {
+		return e, nil
 	}
 
-	return e, nil
+	// Handle receive error
+	s.err = err
+
+	if s.reader != nil {
+		// Close current reader.
+		if closeErr := s.reader.Close(); closeErr != nil {
+			log.Error(s.ctx, errors.Wrap(closeErr, "reader close"))
+		}
+	}
+
+	return nil, err
 }
 
 func (s *stream) recv() (*reflex.Event, error) {
-	for s.cursor.Key == "" || s.cursor.Last {
+	for s.cursor.Key == "" || s.cursor.EOF {
 		// Starting from scratch or at end of a blob.
 		if err := s.loadNextBlob(); err != nil {
 			return nil, err
@@ -201,13 +208,14 @@ func (s *stream) recv() (*reflex.Event, error) {
 		}
 	}
 
-	temp, err := s.decoder.Decode()
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, errors.Wrap(err, "decode error")
+	peek, err := s.decoder.Decode()
+	if errors.Is(err, io.EOF) {
+		s.cursor.EOF = true
+	} else if err != nil {
+		return nil, errors.Wrap(err, "decode")
 	}
 
 	s.cursor.Offset++
-	s.cursor.Last = temp == nil
 
 	e := &reflex.Event{
 		ID:        s.cursor.String(),
@@ -217,7 +225,7 @@ func (s *stream) recv() (*reflex.Event, error) {
 		MetaData:  s.next,
 	}
 
-	s.next = temp
+	s.next = peek
 
 	return e, nil
 }
@@ -225,14 +233,13 @@ func (s *stream) recv() (*reflex.Event, error) {
 // loadCurrentBlob loads the blob decoder for the current cursor.
 // It assumes the cursor is not at the end of the blob.
 func (s *stream) loadCurrentBlob() error {
-
 	if !s.blobTime.IsZero() {
 		return errors.New("loading current while time set")
 	}
 
 	r, err := s.bucket.NewReader(s.ctx, s.cursor.Key, nil)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "new reader")
 	}
 
 	d, err := s.decoderFunc(r)
@@ -240,20 +247,14 @@ func (s *stream) loadCurrentBlob() error {
 		return err
 	}
 
-	var i int64
-	for {
-		// Gobble events up to cursor.
+	// Gobble events up to cursor.
+	for i := int64(0); i <= s.cursor.Offset; i++ {
 		_, err := d.Decode()
 		if errors.Is(err, io.EOF) {
 			return errors.New("cursor out of range")
 		} else if err != nil {
-			return err
+			return errors.Wrap(err, "decode")
 		}
-
-		if i == s.cursor.Offset {
-			break
-		}
-		i++
 	}
 
 	s.reader = r
@@ -261,9 +262,9 @@ func (s *stream) loadCurrentBlob() error {
 	s.blobTime = r.ModTime()
 	s.next, err = d.Decode()
 	if errors.Is(err, io.EOF) {
-		return errors.New("current cursor is last")
+		return errors.New("cursor was eof")
 	} else if err != nil {
-		return err
+		return errors.Wrap(err, "decode")
 	}
 
 	return nil
@@ -272,10 +273,12 @@ func (s *stream) loadCurrentBlob() error {
 // loadNextBlob waits until a subsequent blob is available then
 // loads a decoder and cursor for it.
 func (s *stream) loadNextBlob() error {
+	var key string
 	for {
-		next, err := getNextKey(s.ctx, s.bucket, s.cursor.Key)
+		var err error
+		key, err = getNextKey(s.ctx, s.bucket, s.cursor.Key)
 		if errors.Is(err, io.EOF) {
-			// No next keys, wait.
+			// No key keys, wait.
 			select {
 			case <-s.ctx.Done():
 				return s.ctx.Err()
@@ -285,39 +288,43 @@ func (s *stream) loadNextBlob() error {
 		} else if err != nil {
 			return err
 		}
-
-		r, err := s.bucket.NewReader(s.ctx, next, nil)
-		if err != nil {
-			return err
-		}
-
-		d, err := s.decoderFunc(r)
-		if err != nil {
-			return err
-		}
-
-		s.next, err = d.Decode()
-		if err != nil && !errors.Is(err, io.EOF) {
-			return err
-		}
-
-		if s.reader != nil {
-			// Close previous reader.
-			if err := s.reader.Close(); err != nil {
-				return err
-			}
-		}
-
-		s.reader = r
-		s.decoder = d
-		s.blobTime = r.ModTime()
-		s.cursor = cursor{
-			Key:    next,
-			Offset: -1,
-			Last:   s.next == nil,
-		}
 		break
 	}
+
+	c := cursor{
+		Key:    key,
+		Offset: -1,
+	}
+
+	r, err := s.bucket.NewReader(s.ctx, key, nil)
+	if err != nil {
+		return errors.Wrap(err, "new reader")
+	}
+
+	d, err := s.decoderFunc(r)
+	if err != nil {
+		return err
+	}
+
+	next, err := d.Decode()
+	if errors.Is(err, io.EOF) {
+		c.EOF = true
+	} else if err != nil {
+		return errors.Wrap(err, "decode")
+	}
+
+	if s.reader != nil {
+		// Close previous reader.
+		if err := s.reader.Close(); err != nil {
+			return err
+		}
+	}
+
+	s.reader = r
+	s.decoder = d
+	s.blobTime = r.ModTime()
+	s.cursor = c
+	s.next = next
 
 	return nil
 }
@@ -329,7 +336,7 @@ func getNextKey(ctx context.Context, bucket *blob.Bucket, prev string) (string, 
 	for {
 		o, err := iter.Next(ctx)
 		if err != nil {
-			return "", err
+			return "", errors.Wrap(err, "list iter")
 		}
 
 		if o.Key > prev {
@@ -357,15 +364,17 @@ func makeStartAfter(key string) func(func(interface{}) bool) error {
 type cursor struct {
 	Key    string // Key of blob in the bucket.
 	Offset int64  // Offset of event in the blob.
-	Last   bool   // Last event in the blob.
+	EOF    bool   // End of blob reached (overrides Offset).
 }
 
+// eof as cursor offset indicates it has reached the enf of a blob.
+const eof = "eof"
+
 func (c cursor) String() string {
-	res := fmt.Sprintf("%s|%d", c.Key, c.Offset)
-	if c.Last {
-		res += "|last"
+	if c.EOF {
+		return fmt.Sprintf("%s|%s", c.Key, eof)
 	}
-	return res
+	return fmt.Sprintf("%s|%d", c.Key, c.Offset)
 }
 
 func parseCursor(cur string) (cursor, error) {
@@ -374,28 +383,26 @@ func parseCursor(cur string) (cursor, error) {
 	}
 
 	split := strings.Split(cur, "|")
-	if len(split) < 2 || len(split) > 3 {
-		return cursor{}, errors.New("invalid cursor")
+	if len(split) != 2 {
+		return cursor{}, errors.New("invalid cursor", j.KS("cursor", cur))
+	}
+
+	if split[1] == eof {
+		return cursor{
+			Key: split[0],
+			EOF: true,
+		}, nil
 	}
 
 	i, err := strconv.ParseInt(split[1], 10, 64)
 	if err != nil {
-		return cursor{}, errors.New("invalid cursor offset")
-	}
-
-	var last bool
-	if len(split) == 3 {
-		if split[2] != "last" {
-			return cursor{}, errors.New("invalid cursor end")
-		}
-		last = true
+		return cursor{}, errors.New("invalid cursor offset", j.KS("cursor", cur))
 	}
 
 	return cursor{
 		Key:    split[0],
 		Offset: i,
-		Last:   last,
-	}, err
+	}, nil
 }
 
 type etype struct{}

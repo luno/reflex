@@ -46,7 +46,7 @@ func TestStreamAll(t *testing.T) {
 		{
 			Name:     "all after 2019",
 			Path:     "",
-			After:    "2019/12/31/Test-2019-12-31-17-56-01-1to3|2|last",
+			After:    "2019/12/31/Test-2019-12-31-17-56-01-1to3|eof",
 			Expect:   4,
 			IDOffset: 3,
 		}, {
@@ -141,7 +141,7 @@ func TestCancelWait(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
 
-	sc, err := s.Stream(ctx, "2099|0|last")
+	sc, err := s.Stream(ctx, "2099|eof")
 	require.NoError(t, err)
 
 	_, err = sc.Recv()
