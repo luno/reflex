@@ -352,8 +352,10 @@ func makeStartAfter(key string) func(func(interface{}) bool) error {
 	return func(asFunc func(interface{}) bool) error {
 		s3input := new(s3.ListObjectsV2Input)
 		if asFunc(&s3input) {
-			after := path.Join(*s3input.Prefix, key)
-			s3input.StartAfter = &after
+			if s3input.Prefix != nil {
+				key = path.Join(*s3input.Prefix, key)
+			}
+			s3input.StartAfter = &key
 		}
 		return nil
 	}
