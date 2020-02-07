@@ -48,11 +48,13 @@ type Option func(*Bucket)
 
 // OpenBucket opens and returns a bucket for the provided url.
 //
-// URL defines the url of the blob bucket. See the gocloud
+// label defines the bucket label used for metrics.
+//
+// urlstr defines the url of the blob bucket. See the gocloud
 // URLOpener documentation in driver subpackages for details
 // on supported URL formats. Also see https://gocloud.dev/concepts/urls/
 // and https://gocloud.dev/howto/blob/.
-func OpenBucket(ctx context.Context, urlstr string,
+func OpenBucket(ctx context.Context, label, urlstr string,
 	opts ...Option) (*Bucket, error) {
 
 	u, err := url.Parse(urlstr)
@@ -70,13 +72,14 @@ func OpenBucket(ctx context.Context, urlstr string,
 		return nil, err
 	}
 
-	return NewBucket(bucket, opts...), nil
+	return NewBucket(label, bucket, opts...), nil
 }
 
 // NewBucket returns a bucket using the provided underlying bucket.
-func NewBucket(bucket *blob.Bucket, opts ...Option) *Bucket {
+func NewBucket(label string, bucket *blob.Bucket, opts ...Option) *Bucket {
 
 	b := &Bucket{
+		label:       label,
 		bucket:      bucket,
 		decoderFunc: JSONDecoder,
 		backoff:     time.Minute,
@@ -92,6 +95,7 @@ func NewBucket(bucket *blob.Bucket, opts ...Option) *Bucket {
 // Bucket defines a bucket from which to stream the content of
 // consecutive blobs as events.
 type Bucket struct {
+	label       string
 	bucket      *blob.Bucket
 	decoderFunc func(io.Reader) (Decoder, error)
 	backoff     time.Duration
@@ -127,6 +131,7 @@ func (b *Bucket) Stream(ctx context.Context, after string,
 
 	return &stream{
 		ctx:         ctx,
+		label:       b.label,
 		bucket:      b.bucket,
 		decoderFunc: b.decoderFunc,
 		backoff:     b.backoff,
@@ -141,6 +146,7 @@ var (
 
 type stream struct {
 	ctx         context.Context
+	label       string
 	bucket      *blob.Bucket
 	decoderFunc func(io.Reader) (Decoder, error)
 	backoff     time.Duration
@@ -242,6 +248,8 @@ func (s *stream) loadCurrentBlob() error {
 		return errors.Wrap(err, "new reader")
 	}
 
+	readCounter.WithLabelValues(s.label).Inc()
+
 	d, err := s.decoderFunc(r)
 	if err != nil {
 		return err
@@ -276,7 +284,7 @@ func (s *stream) loadNextBlob() error {
 	var key string
 	for {
 		var err error
-		key, err = getNextKey(s.ctx, s.bucket, s.cursor.Key)
+		key, err = getNextKey(s.ctx, s.label, s.bucket, s.cursor.Key)
 		if errors.Is(err, io.EOF) {
 			// No key keys, wait.
 			select {
@@ -300,6 +308,8 @@ func (s *stream) loadNextBlob() error {
 	if err != nil {
 		return errors.Wrap(err, "new reader")
 	}
+
+	readCounter.WithLabelValues(s.label).Inc()
 
 	d, err := s.decoderFunc(r)
 	if err != nil {
@@ -329,10 +339,11 @@ func (s *stream) loadNextBlob() error {
 	return nil
 }
 
-func getNextKey(ctx context.Context, bucket *blob.Bucket, prev string) (string, error) {
+func getNextKey(ctx context.Context, label string, bucket *blob.Bucket, prev string) (string, error) {
 	iter := bucket.List(&blob.ListOptions{
 		BeforeList: makeStartAfter(prev),
 	})
+
 	for {
 		o, err := iter.Next(ctx)
 		if err != nil {
@@ -342,7 +353,8 @@ func getNextKey(ctx context.Context, bucket *blob.Bucket, prev string) (string, 
 		if o.Key > prev {
 			return o.Key, nil
 		}
-		// TODO(corver): Add metrics for non-optimal listing.
+
+		listSkipCounter.WithLabelValues(label).Inc()
 	}
 }
 

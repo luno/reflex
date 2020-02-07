@@ -37,7 +37,7 @@ func TestS3(t *testing.T) {
 
 	ctx := context.Background()
 
-	b, err := rblob.OpenBucket(ctx, *s3url)
+	b, err := rblob.OpenBucket(ctx, "", *s3url)
 	require.NoError(t, err)
 
 	sc, err := b.Stream(ctx, *s3after)

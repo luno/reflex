@@ -66,7 +66,7 @@ func TestStreamAll(t *testing.T) {
 
 			url := "file:///" + path.Join(dir, "testdata", test.Path)
 
-			bucket, err := rblob.OpenBucket(context.Background(), url)
+			bucket, err := rblob.OpenBucket(context.Background(), "", url)
 			require.NoError(t, err)
 			defer bucket.Close()
 
@@ -94,7 +94,7 @@ func TestWaitForMore(t *testing.T) {
 
 	url := "file:///" + path.Join(dir, "testdata")
 
-	s, err := rblob.OpenBucket(context.Background(), url,
+	s, err := rblob.OpenBucket(context.Background(), "", url,
 		rblob.WithBackoff(time.Millisecond))
 	require.NoError(t, err)
 	defer s.Close()
@@ -133,7 +133,7 @@ func TestCancelWait(t *testing.T) {
 	url := "file:///" + path.Join(dir, "testdata")
 
 	// Wait forever if no files
-	s, err := rblob.OpenBucket(context.Background(), url,
+	s, err := rblob.OpenBucket(context.Background(), "", url,
 		rblob.WithBackoff(time.Hour))
 	require.NoError(t, err)
 	defer s.Close()
