@@ -17,6 +17,8 @@ import (
 	"github.com/luno/reflex/rsql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -462,6 +464,25 @@ func TestStreamLagCache(t *testing.T) {
 	// We do not expect an event here.
 	_, err := sc2.Recv()
 	jtest.Assert(t, context.Canceled, err)
+}
+
+func TestCancelError(t *testing.T) {
+	s := setupState(t, nil, nil)
+	defer s.stop()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	sc, err := s.client.StreamEvents(ctx, "")
+	require.NoError(t, err)
+
+	cancel()
+
+	_, err = sc.Recv()
+	require.Error(t, err)
+
+	stats, ok := status.FromError(err)
+	require.True(t, ok)
+	require.Equal(t, codes.Canceled, stats.Code())
 }
 
 type teststate struct {
