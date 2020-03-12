@@ -65,7 +65,7 @@ func fillGap(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64) er
 		return err
 	}
 	if committed {
-		return nil // Gap filled
+		return nil // Gap already filled
 	}
 
 	// It does not exists at all, so insert noop.
@@ -75,8 +75,13 @@ func fillGap(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64) er
 	if isMySQLErrDupEntry(err) {
 		// Someone got there first, but that's ok.
 		return nil
+	} else if err != nil {
+		return err
 	}
-	return err
+
+	eventsGapFilledCounter.WithLabelValues(schema.name).Inc()
+
+	return nil
 }
 
 func exists(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64,
