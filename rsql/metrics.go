@@ -17,6 +17,13 @@ var (
 		Help:      "Total number of get next events queries performed per table",
 	}, []string{"table"})
 
+	eventsBlockingGapGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "reflex",
+		Subsystem: "events_table",
+		Name:      "blocking_gap",
+		Help:      "Whether the event loader is blocked on a gap",
+	}, []string{"table"})
+
 	eventsGapDetectCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "reflex",
 		Subsystem: "events_table",
@@ -65,4 +72,5 @@ func init() {
 	prometheus.MustRegister(eventsGapDetectCounter)
 	prometheus.MustRegister(eventsGapFilledCounter)
 	prometheus.MustRegister(eventsGapListenGauge)
+	prometheus.MustRegister(eventsBlockingGapGauge)
 }

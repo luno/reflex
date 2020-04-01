@@ -93,6 +93,7 @@ func wrapGapDetector(loader loader, ch chan<- Gap, name string) loader {
 
 			next := e.IDInt()
 			if prev != 0 && next != prev+1 {
+				eventsBlockingGapGauge.WithLabelValues(name).Set(1)
 				// Gap detected, return everything before it.
 				eventsGapDetectCounter.WithLabelValues(name).Inc()
 				select {
@@ -101,6 +102,7 @@ func wrapGapDetector(loader loader, ch chan<- Gap, name string) loader {
 				}
 				return el[:i], nil
 			}
+			eventsBlockingGapGauge.WithLabelValues(name).Set(0)
 
 			prev = next
 		}
