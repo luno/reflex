@@ -34,7 +34,7 @@ func makeDefaultInserter(schema etableSchema) inserter {
 		foreignID string, typ reflex.EventType, metadata []byte) error {
 
 		q := "insert into " + schema.name +
-			" set " + schema.foreignIDField + "=?, " + schema.timeField + "=now(), " + schema.typeField + "=?"
+			" set " + schema.foreignIDField + "=?, " + schema.timeField + "=now(6), " + schema.typeField + "=?"
 		args := []interface{}{foreignID, typ.ReflexType()}
 
 		if schema.metadataField != "" {
