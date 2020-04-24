@@ -4,6 +4,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/luno/jettison/j"
+
+	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/log"
+
 	"github.com/luno/fate"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -12,10 +17,11 @@ const defaultLagAlert = 30 * time.Minute
 const defaultActivityTTL = 24 * time.Hour
 
 type consumer struct {
-	fn          func(context.Context, fate.Fate, *Event) error
-	name        string
-	lagAlert    time.Duration
-	activityTTL time.Duration
+	fn           func(context.Context, fate.Fate, *Event) error
+	name         string
+	lagAlert     time.Duration
+	activityTTL  time.Duration
+	isBestEffort bool
 
 	lagGauge      prometheus.Gauge
 	lagAlertGauge prometheus.Gauge
@@ -40,6 +46,16 @@ func WithConsumerLagAlert(d time.Duration) ConsumerOption {
 func WithConsumerActivityTTL(ttl time.Duration) ConsumerOption {
 	return func(c *consumer) {
 		c.activityTTL = ttl
+	}
+}
+
+// WithConsumerBestEffort provides an option to configure the consumer as best
+// effort; ie. to just log consume errors and continue to the next event. If combined
+// with a second identical default (non-best-effort) consumer, it can
+// provide some mitigation against it being stuck on some error.
+func WithConsumerBestEffort() ConsumerOption {
+	return func(c *consumer) {
+		c.isBestEffort = true
 	}
 }
 
@@ -95,6 +111,11 @@ func (c *consumer) Consume(ctx context.Context, fate fate.Fate,
 
 	latency := time.Since(t0)
 	c.latencyHist.Observe(latency.Seconds())
+
+	if err != nil && c.isBestEffort {
+		log.Error(ctx, errors.Wrap(err, "best effort consumer ignoring error", j.KS("consumer", c.name)))
+		return nil
+	}
 
 	return err
 }
