@@ -7,10 +7,6 @@ import (
 )
 
 func TestCursorsTable(t *testing.T) {
-	dbc, err := ConnectForTesting(t)
-	if err != nil {
-		t.Error(err)
-	}
-
+	dbc := ConnectForTesting(t)
 	rsql.TestCursorsTable(t, dbc, Cursors)
 }

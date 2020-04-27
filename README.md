@@ -1,4 +1,5 @@
 # Reflex
+[![Build](https://github.com/luno/reflex/workflows/Go/badge.svg?branch=master)](https://github.com/luno/reflex/actions?query=workflow%3AGo)
 [![Go Report Card](https://goreportcard.com/badge/github.com/luno/reflex?style=flat-square)](https://goreportcard.com/report/github.com/luno/reflex)
 [![Go Doc](https://img.shields.io/badge/godoc-reference-blue.svg?style=flat-square)](http://godoc.org/github.com/luno/reflex)
 

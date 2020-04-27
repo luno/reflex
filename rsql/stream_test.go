@@ -270,6 +270,7 @@ func TestConsumeStreamLag(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	go func() {
 		// wait for first batch
@@ -277,7 +278,7 @@ func TestConsumeStreamLag(t *testing.T) {
 
 		// push back rest of events 2 mins
 		for i := firstBatch; i < total; i++ {
-			_, err := s.dbc.Exec("update "+eventsTable+" set timestamp=date_sub(timestamp, interval 120 second) where id=?", i+1)
+			_, err := s.dbc.ExecContext(ctx, "update "+eventsTable+" set timestamp=date_sub(timestamp, interval 120 second) where id=?", i+1)
 			assert.NoError(t, err)
 		}
 

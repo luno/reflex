@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	db_test_uri = flag.String("db_test_base", "root@unix("+getSocketFile()+")/test?", "Test database uri")
+	db_test_uri = flag.String("db_test_uri", getDefaultURI(), "Test database uri")
 
 	eventsTimeField          = "timestamp"
 	eventsTypeField          = "type"
@@ -153,6 +153,15 @@ func connect(n int) (*sql.DB, error) {
 	}
 
 	return dbc, nil
+}
+
+func getDefaultURI() string {
+	uri := os.Getenv("DB_TEST_URI")
+	if uri != "" {
+		return uri
+	}
+
+	return "root@unix(" + getSocketFile() + ")/test?"
 }
 
 func getSocketFile() string {

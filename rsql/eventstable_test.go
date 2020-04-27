@@ -486,6 +486,6 @@ func TestInMemNotifier(t *testing.T) {
 	e, err := sc.Recv()
 	require.NoError(t, err)
 	require.Equal(t, int64(1), e.ForeignIDInt())
-	require.True(t, time.Since(t0) > lag)
-	require.True(t, time.Since(t0) < 2*lag)
+	require.True(t, time.Since(t0) > lag, "want: %s\ngot: %s", lag, time.Since(t0))
+	require.True(t, time.Since(t0) < 5*time.Second, time.Since(t0))
 }
