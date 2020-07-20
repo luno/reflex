@@ -27,19 +27,33 @@ type consumer struct {
 type ConsumerOption func(*consumer)
 
 // WithConsumerLagAlert provides an option to set the consumer lag alert
-// threshold. Setting it to -1 disables the alert.
+// threshold.
 func WithConsumerLagAlert(d time.Duration) ConsumerOption {
 	return func(c *consumer) {
 		c.lagAlert = d
 	}
 }
 
+// WithoutConsumerLag provides an option to disable the consumer lag alert.
+func WithoutConsumerLag() ConsumerOption {
+	return func(c *consumer) {
+		c.lagAlert = -1
+	}
+}
+
 // WithConsumerActivityTTL provides an option to set the consumer activity
 // metric ttl; ie. if no events is consumed in `tll` duration the consumer
-// is considered inactive. Setting it to -1 disables the activity metric.
+// is considered inactive.
 func WithConsumerActivityTTL(ttl time.Duration) ConsumerOption {
 	return func(c *consumer) {
 		c.activityTTL = ttl
+	}
+}
+
+// WithoutConsumerActivityTTL provides an option to disable the consumer activity metric ttl.
+func WithoutConsumerActivityTTL() ConsumerOption {
+	return func(c *consumer) {
+		c.activityTTL = -1
 	}
 }
 
