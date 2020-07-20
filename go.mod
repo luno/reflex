@@ -5,8 +5,6 @@ go 1.14
 require (
 	cloud.google.com/go/bigquery v1.6.0 // indirect
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
-	github.com/Azure/go-autorest/autorest v0.10.0 // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.8.3 // indirect
 	github.com/aws/aws-sdk-go v1.30.14
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/protobuf v1.4.0
