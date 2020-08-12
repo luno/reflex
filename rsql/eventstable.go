@@ -101,11 +101,19 @@ func WithEventsInMemNotifier() EventsOption {
 }
 
 // WithEventsCacheEnabled provides an option to enable the read-through
-// cache on the events tables.
+// cache on the events table.
 // TODO(corver): Enable this by default.
 func WithEventsCacheEnabled() EventsOption {
 	return func(table *EventsTable) {
 		table.enableCache = true
+	}
+}
+
+// WithoutEventsCache provides an option to disable the read-through
+// cache on the events table.
+func WithoutEventsCache() EventsOption {
+	return func(table *EventsTable) {
+		table.enableCache = false
 	}
 }
 
