@@ -412,15 +412,26 @@ func TestStreamMetadata(t *testing.T) {
 	}
 }
 
-func TestStreamLagCache(t *testing.T) {
+func TestStreamLag(t *testing.T) {
+	// Wrap baseloader to count sql queries.
+	loadCountCh := make(chan struct{}, 100)
+	var table *rsql.EventsTable
+	loader := func(ctx context.Context, dbc *sql.DB, prevCursor int64,
+		lag time.Duration) (events []*reflex.Event, err error) {
+		loadCountCh <- struct{}{}
+		return rsql.GetNextEventsForTesting(t, ctx, dbc, table, prevCursor, lag)
+	}
+
 	notifier := new(mockNotifier)
 	s := setupState(t, nil,
 		[]rsql.EventsOption{
-			rsql.WithEventsCacheEnabled(),
+			rsql.WithEventsLoader(loader),
 			rsql.WithEventsNotifier(notifier),
 			rsql.WithEventsBackoff(time.Hour), // Manual control on sleep.
 		})
 	defer s.stop()
+
+	table = s.etable
 
 	// Insert 10 events, staggered 1 min apart
 	total := 10
@@ -443,6 +454,9 @@ func TestStreamLagCache(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// We only did only sql load.
+	require.Len(t, loadCountCh, 1)
+
 	// Then try again, but lag 5.5 min, so expect only 4 events.
 	lag := reflex.WithStreamLag(time.Second * (60*5 + 30))
 	sc2 := s.etable.Stream(ctx, s.dbc, "", lag)
@@ -451,6 +465,9 @@ func TestStreamLagCache(t *testing.T) {
 		_, err := sc2.Recv()
 		require.NoError(t, err)
 	}
+
+	// We still only did only sql load, we are using the cache.
+	require.Len(t, loadCountCh, 1)
 
 	// Next call should not return an event, but backoff and then we cancel.
 	go func() {
@@ -465,6 +482,86 @@ func TestStreamLagCache(t *testing.T) {
 	// We do not expect an event here.
 	_, err := sc2.Recv()
 	jtest.Assert(t, context.Canceled, err)
+
+	// We still only did only sql load, we are using the cache.
+	require.Len(t, loadCountCh, 1)
+}
+
+// TestStreamLagNoCache is a copy of TestStreamLagCache but with cache disabled.
+func TestStreamLagNoCache(t *testing.T) {
+	// Wrap baseloader to count sql queries.
+	loadCountCh := make(chan struct{}, 100)
+	var table *rsql.EventsTable
+	loader := func(ctx context.Context, dbc *sql.DB, prevCursor int64,
+		lag time.Duration) (events []*reflex.Event, err error) {
+		loadCountCh <- struct{}{}
+		return rsql.GetNextEventsForTesting(t, ctx, dbc, table, prevCursor, lag)
+	}
+
+	notifier := new(mockNotifier)
+	s := setupState(t, nil,
+		[]rsql.EventsOption{
+			rsql.WithEventsLoader(loader),
+			rsql.WithoutEventsCache(),
+			rsql.WithEventsNotifier(notifier),
+			rsql.WithEventsBackoff(time.Hour), // Manual control on sleep.
+		})
+	defer s.stop()
+
+	table = s.etable
+
+	// Insert 10 events, staggered 1 min apart
+	total := 10
+	for i := 1; i <= total; i++ {
+		err := insertTestEvent(s.dbc, s.etable, i2s(i), testEventType(i))
+		require.NoError(t, err)
+
+		ts := (total - i) * 60
+		_, err = s.dbc.Exec("update "+eventsTable+" set timestamp=date_sub(timestamp, interval ? second) where id=?", ts, i)
+		assert.NoError(t, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// First read all 10 events.
+	sc1 := s.etable.Stream(ctx, s.dbc, "")
+	for i := 0; i < total; i++ {
+		_, err := sc1.Recv()
+		require.NoError(t, err)
+	}
+
+	// We did one sql load.
+	require.Len(t, loadCountCh, 1)
+
+	// Then try again, but lag 5.5 min, so expect only 4 events.
+	lag := reflex.WithStreamLag(time.Second * (60*5 + 30))
+	sc2 := s.etable.Stream(ctx, s.dbc, "", lag)
+
+	for i := 0; i < 4; i++ {
+		_, err := sc2.Recv()
+		require.NoError(t, err)
+	}
+
+	// We did another sql load, since cache disabled.
+	require.Len(t, loadCountCh, 2)
+
+	// Next call should not return an event, but backoff and then we cancel.
+	go func() {
+		notifier.WaitForWatch()
+		// Trigger another read from the cache
+		notifier.Notify()
+		notifier.WaitForWatch()
+		// And then cancel
+		cancel()
+	}()
+
+	// We do not expect an event here.
+	_, err := sc2.Recv()
+	jtest.Assert(t, context.Canceled, err)
+
+	// We did another sql load, since cache disabled, sometimes more due to races.
+	require.True(t, len(loadCountCh) >= 3)
 }
 
 func TestCancelError(t *testing.T) {

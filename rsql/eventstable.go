@@ -40,7 +40,7 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	}
 
 	table.gapCh = make(chan Gap)
-	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.enableCache, table.schema)
+	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.disableCache, table.schema)
 
 	return table
 }
@@ -102,10 +102,11 @@ func WithEventsInMemNotifier() EventsOption {
 
 // WithEventsCacheEnabled provides an option to enable the read-through
 // cache on the events table.
-// TODO(corver): Enable this by default.
+//
+// Deprecated: Cache enabled by default.
 func WithEventsCacheEnabled() EventsOption {
 	return func(table *EventsTable) {
-		table.enableCache = true
+		table.disableCache = false
 	}
 }
 
@@ -113,7 +114,7 @@ func WithEventsCacheEnabled() EventsOption {
 // cache on the events table.
 func WithoutEventsCache() EventsOption {
 	return func(table *EventsTable) {
-		table.enableCache = false
+		table.disableCache = true
 	}
 }
 
@@ -152,10 +153,10 @@ type inserter func(ctx context.Context, tx *sql.Tx,
 // for a sql db table.
 type EventsTable struct {
 	options
-	schema      etableSchema
-	enableCache bool
-	baseLoader  loader
-	inserter    inserter
+	schema       etableSchema
+	disableCache bool
+	baseLoader   loader
+	inserter     inserter
 
 	// Stateful fields not cloned
 	currentLoader filterLoader
@@ -198,10 +199,10 @@ func (t *EventsTable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreig
 // Note that the stateful fields are not clone, so the cache is not shared.
 func (t *EventsTable) Clone(opts ...EventsOption) *EventsTable {
 	table := &EventsTable{
-		options:     t.options,
-		schema:      t.schema,
-		enableCache: t.enableCache,
-		baseLoader:  nil,
+		options:      t.options,
+		schema:       t.schema,
+		disableCache: t.disableCache,
+		baseLoader:   nil,
 	}
 	for _, opt := range opts {
 		opt(table)
@@ -213,7 +214,7 @@ func (t *EventsTable) Clone(opts ...EventsOption) *EventsTable {
 
 	table.gapCh = make(chan Gap)
 	table.currentLoader = buildLoader(table.baseLoader, table.gapCh,
-		table.enableCache, table.schema)
+		table.disableCache, table.schema)
 
 	return table
 }
@@ -276,12 +277,12 @@ func (t *EventsTable) getSchema() etableSchema {
 }
 
 // buildLoader returns a new layered event loader.
-func buildLoader(baseLoader loader, ch chan<- Gap, enableCache bool, schema etableSchema) filterLoader {
+func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema etableSchema) filterLoader {
 	if baseLoader == nil {
 		baseLoader = makeBaseLoader(schema)
 	}
 	loader := wrapGapDetector(baseLoader, ch, schema.name)
-	if enableCache {
+	if !disableCache /* ie. enableCache */ {
 		loader = newRCache(loader, schema.name).Load
 	}
 	return wrapNoopFilter(loader)
