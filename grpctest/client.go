@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/luno/jettison/interceptors"
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/reflexpb"
 	"google.golang.org/grpc"
@@ -16,7 +17,9 @@ type Client struct {
 }
 
 func NewClient(_ testing.TB, url string) *Client {
-	conn, err := grpc.Dial(url, grpc.WithInsecure())
+	conn, err := grpc.Dial(url, grpc.WithInsecure(),
+		grpc.WithUnaryInterceptor(interceptors.UnaryClientInterceptor),
+		grpc.WithStreamInterceptor(interceptors.StreamClientInterceptor))
 	if err != nil {
 		panic(fmt.Errorf("grpc.Dial error: %s", err.Error()))
 	}

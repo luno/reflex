@@ -368,7 +368,17 @@ func (s *streamclient) Recv() (*reflex.Event, error) {
 			break
 		}
 
-		s.prev = override
+		if s.prev != override {
+			// Whole range of events skipped, try again with new override cursor.
+			s.prev = override
+			continue
+		}
+
+		// No cursor override or events, so current head reached.
+
+		if s.StreamToHead {
+			return nil, reflex.ErrHeadReached
+		}
 
 		if err := s.wait(s.backoff); err != nil {
 			return nil, err

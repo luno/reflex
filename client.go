@@ -2,7 +2,6 @@ package reflex
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/luno/reflex/reflexpb"
 )
@@ -22,12 +21,9 @@ func WrapStreamPB(wrap func(context.Context, *reflexpb.StreamRequest) (
 			return nil, err
 		}
 
-		afterInt, _ := strconv.ParseInt(after, 10, 64) // Remove after migration
-
 		cspb, err := wrap(ctx, &reflexpb.StreamRequest{
-			After:    after,
-			AfterInt: afterInt,
-			Options:  optionspb,
+			After:   after,
+			Options: optionspb,
 		})
 		if err != nil {
 			return nil, err

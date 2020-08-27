@@ -39,6 +39,12 @@ func Test_optsToProto(t *testing.T) {
 			Output: StreamOptions{StreamFromHead: true, Lag: time.Second},
 			Count:  2,
 		},
+		{
+			Name:   "to head",
+			Input:  []StreamOption{WithStreamToHead()},
+			Output: StreamOptions{StreamToHead: true},
+			Count:  1,
+		},
 	}
 
 	for _, test := range tests {

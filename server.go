@@ -3,7 +3,6 @@ package reflex
 import (
 	"context"
 	"io"
-	"strconv"
 
 	"github.com/luno/jettison/errors"
 	"github.com/luno/reflex/reflexpb"
@@ -52,11 +51,6 @@ func (s *Server) Stream(sFn StreamFunc, req *reflexpb.StreamRequest, sspb stream
 		return err
 	}
 
-	after := req.After
-	if after == "" && req.AfterInt != 0 {
-		after = strconv.FormatInt(req.AfterInt, 10)
-	}
-
 	ctx, cancel := context.WithCancel(sspb.Context())
 	defer cancel()
 
@@ -65,7 +59,7 @@ func (s *Server) Stream(sFn StreamFunc, req *reflexpb.StreamRequest, sspb stream
 	}
 
 	streamer := func() error {
-		sc, err := sFn(ctx, after, optsFromProto(req.Options)...)
+		sc, err := sFn(ctx, req.After, optsFromProto(req.Options)...)
 		if err != nil {
 			return err
 		}
@@ -98,7 +92,7 @@ func serveStream(ss streamServerPB, sc StreamClient) error {
 
 		e, err := sc.Recv()
 		if err != nil {
-			return errors.Wrap(err, "recv error")
+			return errors.Wrap(err, "recv error 2")
 		}
 
 		pb, err := eventToProto(e)

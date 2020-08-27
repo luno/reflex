@@ -17,7 +17,7 @@ type loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 // filterLoader defines a function type for loading events from a sql db but
 // also supports filtering of whole ranges of events. It either returns the
 // next available events after prev cursor (exclusive), or a cursor override
-// to use as cursor for the subsequent call, or an error. Events ids are used
+// to use as cursor for the subsequent call, or an error. Event ids are used
 // as cursors, so supporting cursor override when no events are returned
 // allows skipping ranges of noops events.
 //

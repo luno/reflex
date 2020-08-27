@@ -10,13 +10,13 @@ service Reflex {
 }
 
 message StreamRequest {
-  int64 after_int = 1; //TODO(corver): Reserve after migration
+  reserved 1;
   StreamOptions options = 2;
   string after = 3;
 }
 
 message Event {
-  int64 id_int = 1; //TODO(corver): Reserve after migration
+  reserved 1;
   reserved 2;
   int32 type = 3;
   google.protobuf.Timestamp timestamp = 4;
@@ -29,4 +29,5 @@ message StreamOptions {
   google.protobuf.Duration lag = 1;
   bool fromHead = 2;
   reserved 3;
+  bool toHead = 4;
 }

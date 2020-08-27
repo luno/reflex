@@ -13,6 +13,10 @@ type StreamOptions struct {
 	// StreamFromHead defines that the initial event be retrieved
 	// from the head of the evens table.
 	StreamFromHead bool
+
+	// StreamToHead defines that ErrHeadReached be returned as soon
+	// as no more events are available.
+	StreamToHead bool
 }
 
 // StreamOption defines a functional option that configures StreamOptions.
@@ -23,6 +27,14 @@ type StreamOption func(*StreamOptions)
 func WithStreamFromHead() StreamOption {
 	return func(sc *StreamOptions) {
 		sc.StreamFromHead = true
+	}
+}
+
+// WithStreamToHead provides an option to return ErrHeadReached as soon
+// as no more events are available. This is useful for testing or back-fills.
+func WithStreamToHead() StreamOption {
+	return func(sc *StreamOptions) {
+		sc.StreamToHead = true
 	}
 }
 

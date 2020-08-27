@@ -2,7 +2,6 @@ package reflex
 
 import (
 	"log"
-	"strconv"
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/duration"
@@ -17,7 +16,6 @@ func eventToProto(e *Event) (*reflexpb.Event, error) {
 
 	return &reflexpb.Event{
 		Id:        e.ID,
-		IdInt:     e.IDInt(),
 		ForeignId: e.ForeignID,
 		Type:      int32(e.Type.ReflexType()),
 		Timestamp: ts,
@@ -31,13 +29,8 @@ func eventFromProto(e *reflexpb.Event) (*Event, error) {
 		return nil, err
 	}
 
-	id := e.Id
-	if id == "" {
-		id = strconv.FormatInt(e.IdInt, 10)
-	}
-
 	return &Event{
-		ID:        id,
+		ID:        e.Id,
 		ForeignID: e.ForeignId,
 		Type:      eventType(e.Type),
 		Timestamp: ts,
@@ -82,6 +75,10 @@ func optsFromProto(options *reflexpb.StreamOptions) []StreamOption {
 		opts = append(opts, WithStreamFromHead())
 	}
 
+	if options.ToHead {
+		opts = append(opts, WithStreamToHead())
+	}
+
 	return opts
 }
 
@@ -99,5 +96,6 @@ func optsToProto(opts []StreamOption) (*reflexpb.StreamOptions, error) {
 	return &reflexpb.StreamOptions{
 		Lag:      lag,
 		FromHead: options.StreamFromHead,
+		ToHead:   options.StreamToHead,
 	}, nil
 }

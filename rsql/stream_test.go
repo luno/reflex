@@ -12,13 +12,12 @@ import (
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/jtest"
+	"github.com/luno/jettison/log"
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/grpctest"
 	"github.com/luno/reflex/rsql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -306,7 +305,7 @@ func TestConsumeStreamLag(t *testing.T) {
 	}
 }
 
-func TestStreamHead(t *testing.T) {
+func TestStreamFromHead(t *testing.T) {
 	notifier := new(mockNotifier)
 	s := setupState(t, nil,
 		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)})
@@ -362,6 +361,61 @@ func TestStreamHead(t *testing.T) {
 		assert.Equal(t, ii, e.Type.ReflexType())
 		assert.Equal(t, int64(ii), e.IDInt())
 	}
+}
+
+func TestStreamToHead(t *testing.T) {
+	notifier := new(mockNotifier)
+	s := setupState(t, nil,
+		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)})
+	defer s.stop()
+
+	assertCount := func(t *testing.T, after string, n, offset int) {
+		sc, err := s.client.StreamEvents(context.TODO(), after, reflex.WithStreamToHead())
+		assert.NoError(t, err)
+
+		var results []*reflex.Event
+		for {
+			e, err := sc.Recv()
+			if reflex.IsHeadReachedErr(err) {
+				break
+			}
+			if err != nil {
+				log.Error(nil, err)
+			}
+
+			jtest.RequireNil(t, err)
+
+			results = append(results, e)
+		}
+
+		require.Len(t, results, n)
+		for i, e := range results {
+			ii := i + offset + 1
+			assertEqualI2S(t, ii, e.ForeignID)
+			assert.Equal(t, ii, e.Type.ReflexType())
+			assert.Equal(t, int64(ii), e.IDInt())
+		}
+	}
+
+	// Table empty
+	assertCount(t, "", 0, 0)
+
+	round1 := 10
+	for i := 1; i <= round1; i++ { // Start at 1 since 0 is noop.
+		err := insertTestEvent(s.dbc, s.etable, i2s(i), testEventType(i))
+		require.NoError(t, err)
+	}
+	assertCount(t, "", round1, 0)
+	assertCount(t, "5", round1-5, 5)
+
+	round2 := 20
+	for i := round1 + 1; i <= round1+round2; i++ { // Offset by 1
+		err := insertTestEvent(s.dbc, s.etable, i2s(i), testEventType(i))
+		require.NoError(t, err)
+	}
+	assertCount(t, "", round2+round1, 0)
+	assertCount(t, "10", round2, round1)
+	assertCount(t, "30", 0, 0)
 }
 
 func TestStreamMetadata(t *testing.T) {
@@ -577,10 +631,7 @@ func TestCancelError(t *testing.T) {
 
 	_, err = sc.Recv()
 	require.Error(t, err)
-
-	stats, ok := status.FromError(err)
-	require.True(t, ok)
-	require.Equal(t, codes.Canceled, stats.Code())
+	require.Contains(t, err.Error(), "context canceled") // Jettison doesn't support native grpc status errors properly.
 }
 
 type teststate struct {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/interceptors"
 	"github.com/luno/jettison/log"
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/reflexpb"
@@ -22,7 +23,9 @@ func NewServer(_ testing.TB, stream reflex.StreamFunc,
 		panic(fmt.Sprintf("net.Listen error: %v", err))
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.UnaryServerInterceptor),
+		grpc.StreamInterceptor(interceptors.StreamServerInterceptor))
 
 	srv := &Server{
 		stream:      stream,
