@@ -384,11 +384,16 @@ type cursor struct {
 // eof as cursor offset indicates it has reached the enf of a blob.
 const eof = "eof"
 
+// String returns a string format of the cursor which is lexigraphically orderable.
+// Ex. path/to/file|01|9 or path/to/file|03|123 or path/to/file|eof.
 func (c cursor) String() string {
 	if c.EOF {
 		return fmt.Sprintf("%s|%s", c.Key, eof)
 	}
-	return fmt.Sprintf("%s|%d", c.Key, c.Offset)
+
+	offset := strconv.FormatInt(c.Offset, 10)
+
+	return fmt.Sprintf("%s|%02d|%s", c.Key, len(offset), offset)
 }
 
 func parseCursor(cur string) (cursor, error) {
@@ -397,7 +402,7 @@ func parseCursor(cur string) (cursor, error) {
 	}
 
 	split := strings.Split(cur, "|")
-	if len(split) != 2 {
+	if len(split) < 2 || len(split) > 3 {
 		return cursor{}, errors.New("invalid cursor", j.KS("cursor", cur))
 	}
 
@@ -408,7 +413,7 @@ func parseCursor(cur string) (cursor, error) {
 		}, nil
 	}
 
-	i, err := strconv.ParseInt(split[1], 10, 64)
+	i, err := strconv.ParseInt(split[len(split)-1], 10, 64)
 	if err != nil {
 		return cursor{}, errors.New("invalid cursor offset", j.KS("cursor", cur))
 	}
