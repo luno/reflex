@@ -41,6 +41,14 @@ func WithoutConsumerLag() ConsumerOption {
 	}
 }
 
+// WithConsumerLagAlertGauge provides an option to set the consumer lag alert
+// gauge. Handy for custom alert metadata as labels.
+func WithConsumerLagAlertGauge(g prometheus.Gauge) ConsumerOption {
+	return func(c *consumer) {
+		c.lagAlertGauge = g
+	}
+}
+
 // WithConsumerActivityTTL provides an option to set the consumer activity
 // metric ttl; ie. if no events is consumed in `tll` duration the consumer
 // is considered inactive.
