@@ -11,6 +11,7 @@ import (
 // loader defines a function type for loading events from a sql db.
 // It either returns the next available events after prev cursor (exclusive)
 // or an error.
+// TODO(corver): Remove support for lag since we now do this at destination.
 type loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 	lag time.Duration) (events []*reflex.Event, err error)
 
@@ -26,6 +27,8 @@ type loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 //   rCache (if enable) (loader)
 //   gapDetector        (loader)
 //   baseLoader         (loader)
+//
+// TODO(corver): Remove lag since we now do this at destination.
 type filterLoader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 	lag time.Duration) (events []*reflex.Event, cursorOverride int64, err error)
 

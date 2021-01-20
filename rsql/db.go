@@ -95,6 +95,7 @@ func getNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
 	q += " from " + schema.name + " where id>?"
 	args = append(args, after)
 
+	// TODO(corver): Remove support for lag since we now do this at destination.
 	if lag > 0 {
 		q += " and " + schema.timeField + "<timestamp(now()-interval ? second) "
 		args = append(args, lag.Seconds())

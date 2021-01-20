@@ -3,6 +3,7 @@ package reflex
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
@@ -30,7 +31,23 @@ func Run(in context.Context, s Spec) error {
 		}
 	}
 
-	sc, err := s.stream(ctx, cursor, s.opts...)
+	// Filter out stream lag option since we implement lag here not at server.
+	var (
+		lag  time.Duration
+		opts []StreamOption
+	)
+	for _, opt := range s.opts {
+		var temp StreamOptions
+		opt(&temp)
+		if temp.Lag > 0 {
+			lag = temp.Lag
+		} else {
+			opts = append(opts, opt)
+		}
+	}
+
+	// Start stream
+	sc, err := s.stream(ctx, cursor, opts...)
 	if err != nil {
 		return err
 	}
@@ -46,6 +63,17 @@ func Run(in context.Context, s Spec) error {
 			return errors.Wrap(err, "recv error")
 		}
 
+		// Delay events if lag specified.
+		if delay := lag - since(e.Timestamp); lag > 0 && delay > 0 {
+			t := newTimer(delay)
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return ctx.Err()
+			case <-t.C:
+			}
+		}
+
 		if err := s.consumer.Consume(ctx, fate.New(), e); err != nil {
 			return errors.Wrap(err, "consume error")
 		}
@@ -55,3 +83,9 @@ func Run(in context.Context, s Spec) error {
 		}
 	}
 }
+
+// newTimer is aliased for testing.
+var newTimer = time.NewTimer
+
+// since is aliased for testing.
+var since = time.Since
