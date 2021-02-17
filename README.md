@@ -41,6 +41,8 @@ used for cursor persistence and metrics.
 `Spec` combines all three above elements required to stream and consume reflex events. 
 It is passed to `reflex.Run` which streams events from the source to the consumer updating the cursor on success.
 
+See `StreamFunc` and `CursorStore` implementations [below](#sources_and_implementations).
+
 ## Characteristics
 
 **Events are primarily state change notifications**
@@ -71,11 +73,30 @@ It is passed to `reflex.Run` which streams events from the source to the consume
 
 - gRPC implementations are provided for `StreamFunc`.
 - This allows peer-to-peer event streaming without a central event bus.
+- It allows encapsulating events behind a API; #microservices_own_their_own_data 
 
 **It is composable**
 
-- `CursorStore` and `StreamFunc` are decoupled and data store agnostic.
+- `CursorStore` and `StreamFunc` are decoupled and data source/store agnostic.
 - This results in multiple types of `Specs`, including:
-  - local `CursorStore` with gRPC `StreamFunc` (remove events) 
-  - local `CursorStore` and local `StreamFunc` (local events and local cursors) 
-  - remote `CursorStore` with gRPC `StreamFunc` (remove events and remote cursors) 
+  - rsql `CursorStore` with gRPC `StreamFunc` (remove service events and local mysql cursors) 
+  - rsql `CursorStore` and rsql `StreamFunc` (local mysql events and cursors) 
+  - remote `CursorStore` with gRPC `StreamFunc` (remove service events and remote cursors) 
+
+### Sources and implementations
+
+The `github.com/luno/reflex` package provides the main framework API with types and interfaces. 
+
+The `github.com/luno/reflex/rpatterns` package provides patterns for common reflex use-cases.
+
+The following packages provide `reflex.StramFunc` event stream source implementations:
+ - [github.com/luno/reflex/rsql](github.com/luno/reflex/rsql]): mysql backed events with `rsql.EventsTable`.
+ - [github.com/luno/reflex/rblob](github.com/luno/reflex/rblob]): [gocloud](gocloud.dev/howto/blob/) blob store (S3,GCS) backend events with `rblob.Bucket`. 
+ - [experimental] [github.com/corverroos/rscylla](github.com/corverroos/rscylla): [scyllaDB CDC log](docs.scylladb.com/using-scylla/cdc/) backed events.
+ - [experimental] [github.com/corverroos/rlift](github.com/corverroos/rlift): [liftbridge](github.com/liftbridge-io/liftbridge) backed events.
+ 
+The following packages provide `reflex.CursorStore` cursor store implementations:
+ - [github.com/luno/reflex/rsql](github.com/luno/reflex/rsql]): mysql table cursors with `rsql.CursorsTable`.
+ - [experimental] [github.com/corverroos/rlift](github.com/corverroos/rlift): [liftbridge](github.com/liftbridge-io/liftbridge) table cursors with `rlift.CursorStore`.
+
+ 
