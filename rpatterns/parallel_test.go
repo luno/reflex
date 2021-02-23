@@ -2,7 +2,7 @@ package rpatterns_test
 
 import (
 	"context"
-	"reflect"
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -10,7 +10,7 @@ import (
 	"github.com/luno/fate"
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rpatterns"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var pMutex = sync.Mutex{}
@@ -18,14 +18,14 @@ var pMutex = sync.Mutex{}
 func TestParallel(t *testing.T) {
 	cases := []struct {
 		name     string
-		m        int
+		n        int
 		events   []*reflex.Event
 		expexted map[string][]int64
 		hash     rpatterns.HashOption
 	}{
 		{
 			name:   "Hash Event ID",
-			m:      4,
+			n:      4,
 			events: fromIDs(0, 1, 2, 3),
 			hash:   rpatterns.HashOptionEventID,
 			expexted: map[string][]int64{
@@ -37,7 +37,7 @@ func TestParallel(t *testing.T) {
 		},
 		{
 			name:   "Hash Event Foreign Key",
-			m:      4,
+			n:      4,
 			events: fromFIDs(124566, 123412455, 123, 2342, 2304, 140054),
 			hash:   rpatterns.HashOptionEventForeignID,
 			expexted: map[string][]int64{
@@ -49,7 +49,7 @@ func TestParallel(t *testing.T) {
 		},
 		{
 			name:   "Hash Event Type",
-			m:      4,
+			n:      4,
 			events: fromTypes(1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3),
 			hash:   rpatterns.HashOptionEventType,
 			expexted: map[string][]int64{
@@ -87,20 +87,27 @@ func TestParallel(t *testing.T) {
 					i = int64(e.Type.ReflexType())
 				}
 				res[ctx.Value("thread").(string)] = append(res[ctx.Value("thread").(string)], i)
-
 				return nil
 			}
 
-			getCtx := func(n string) context.Context {
-				return context.WithValue(context.Background(), "thread", n)
+			getName := func(m int) string {
+				return fmt.Sprintf("parallel_test_%d_of_%d", m+1, test.n)
 			}
 
-			rpatterns.Parallel(getCtx, "parallel_test", test.m, cursors.Stream,
-				cursors, fn, rpatterns.WithHashOption(test.hash))
+			getCtx := func(m int) context.Context {
+				return context.WithValue(context.Background(), "thread", getName(m))
+			}
+
+			getConsumer := func(m int) reflex.Consumer {
+				return reflex.NewConsumer(getName(m), fn)
+			}
+
+			rpatterns.Parallel(getCtx, getConsumer, test.n, cursors.Stream,
+				cursors, rpatterns.WithHashOption(test.hash))
 
 			wg.Wait()
 
-			assert.True(t, reflect.DeepEqual(res, test.expexted), "Consumers did not process expected events", res, test.expexted)
+			require.EqualValues(t, test.expexted, res)
 		})
 	}
 }

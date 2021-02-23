@@ -2,7 +2,6 @@ package rpatterns
 
 import (
 	"context"
-	"fmt"
 	"hash/fnv"
 	"strconv"
 
@@ -31,17 +30,15 @@ const (
 
 type parallelConfig struct {
 	n            int
-	name         string
 	streamOpts   []reflex.StreamOption
 	consumerOpts []reflex.ConsumerOption
 
-	hash   HashOption
-	handle handleFn
+	hash HashOption
 }
 
 type ParallelOption func(pc *parallelConfig)
-type getCtxFn = func(consumerName string) context.Context
-type handleFn = func(context.Context, fate.Fate, *reflex.Event) error
+type getCtxFn = func(m int) context.Context
+type getConsumerFn = func(m int) reflex.Consumer
 
 // Parallel starts N consumers which consume the stream in parallel. Each event
 // is consistently hashed to a consumer using the field specified in HashOption.
@@ -50,25 +47,23 @@ type handleFn = func(context.Context, fate.Fate, *reflex.Event) error
 //
 // NOTE: N should preferably be a power of 2, and modifying N will reset the
 //       cursors.
-func Parallel(getCtx getCtxFn, name string, n int, stream reflex.StreamFunc,
-	cstore reflex.CursorStore, handle handleFn, opts ...ParallelOption) {
+func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.StreamFunc,
+	cstore reflex.CursorStore, opts ...ParallelOption) {
 
 	conf := parallelConfig{
 		n:    n,
-		name: name,
-
-		hash:   HashOptionEventID,
-		handle: handle,
+		hash: HashOptionEventID,
 	}
 
 	for _, o := range opts {
 		o(&conf)
 	}
 
-	for i := 0; i < n; i++ {
-		consumerM := conf.makeConsumer(i)
+	for m := 0; m < n; m++ {
+		m := m
+		consumerM := makeConsumer(conf.hash, m, n, getConsumer(m))
 		gcf := func() context.Context {
-			return getCtx(consumerM.Name())
+			return getCtx(m)
 		}
 
 		spec := reflex.NewSpec(stream, cstore, consumerM, conf.streamOpts...)
@@ -78,13 +73,12 @@ func Parallel(getCtx getCtxFn, name string, n int, stream reflex.StreamFunc,
 
 // makeConsumer returns consumer m-of-n that will only process events
 // that hash to it.
-func (pc *parallelConfig) makeConsumer(m int) reflex.Consumer {
-	name := fmt.Sprintf("%s_%d_of_%d", pc.name, m+1, pc.n)
+func makeConsumer(hash HashOption, m, n int, inner reflex.Consumer) reflex.Consumer {
 	hasher := fnv.New32()
 
 	f := func(ctx context.Context, fate fate.Fate, event *reflex.Event) error {
 		var hashKey []byte
-		switch pc.hash {
+		switch hash {
 		case HashOptionEventType:
 			hashKey = []byte(strconv.Itoa(int(event.Type.ReflexType())))
 
@@ -105,25 +99,31 @@ func (pc *parallelConfig) makeConsumer(m int) reflex.Consumer {
 		}
 
 		hash := hasher.Sum32()
-		if hash%uint32(pc.n) != uint32(m) {
+		if hash%uint32(n) != uint32(m) {
 			return nil
 		}
-
-		return pc.handle(ctx, fate, event)
+		return inner.Consume(ctx, fate, event)
 	}
 
-	return reflex.NewConsumer(name, f, pc.consumerOpts...)
+	return simpleConsumer{name: inner.Name(), consumeFn: f}
+}
+
+type simpleConsumer struct {
+	name      string
+	consumeFn func(ctx context.Context, fate fate.Fate, event *reflex.Event) error
+}
+
+func (s simpleConsumer) Name() string {
+	return s.name
+}
+
+func (s simpleConsumer) Consume(ctx context.Context, f fate.Fate, event *reflex.Event) error {
+	return s.consumeFn(ctx, f, event)
 }
 
 func WithStreamOpts(opts ...reflex.StreamOption) ParallelOption {
 	return func(pc *parallelConfig) {
 		pc.streamOpts = append(pc.streamOpts, opts...)
-	}
-}
-
-func WithConsumerOpts(opts ...reflex.ConsumerOption) ParallelOption {
-	return func(pc *parallelConfig) {
-		pc.consumerOpts = append(pc.consumerOpts, opts...)
 	}
 }
 
