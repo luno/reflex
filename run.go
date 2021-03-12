@@ -7,6 +7,7 @@ import (
 
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/j"
 )
 
 // Run executes the spec by streaming events from the current cursor,
@@ -75,11 +76,11 @@ func Run(in context.Context, s Spec) error {
 		}
 
 		if err := s.consumer.Consume(ctx, fate.New(), e); err != nil {
-			return errors.Wrap(err, "consume error")
+			return errors.Wrap(err, "consume error", j.KV("event", e.ID))
 		}
 
 		if err := s.cstore.SetCursor(ctx, s.consumer.Name(), e.ID); err != nil {
-			return errors.Wrap(err, "set cursor error")
+			return errors.Wrap(err, "set cursor error", j.KV("event", e.ID))
 		}
 	}
 }
