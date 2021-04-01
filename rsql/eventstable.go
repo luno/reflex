@@ -308,12 +308,13 @@ type etableSchema struct {
 type streamclient struct {
 	options
 
-	schema etableSchema
-	after  string
-	prev   int64 // Previous (current) cursor.
-	buf    []*reflex.Event
-	dbc    *sql.DB
-	ctx    context.Context
+	schema     etableSchema
+	after      string
+	prev       int64 // Previous (current) cursor.
+	buf        []*reflex.Event
+	dbc        *sql.DB
+	ctx        context.Context
+	notifyChan <-chan struct{}
 
 	// loader queries next events from the DB.
 	loader filterLoader
@@ -404,10 +405,14 @@ func (s *streamclient) Recv() (*reflex.Event, error) {
 func (s *streamclient) wait(d time.Duration) error {
 	if d == 0 {
 		return nil
+	} else if s.notifyChan == nil {
+		s.notifyChan = s.notifier.C()
 	}
+
 	t := time.NewTimer(d)
 	select {
-	case <-s.notifier.C():
+	case <-s.notifyChan:
+		s.notifyChan = nil
 		return nil
 	case <-t.C:
 		return nil
@@ -488,6 +493,6 @@ type EventsNotifier interface {
 type StreamWatcher interface {
 	// C returns a channel that blocks until the next event is available in the
 	// StreamWatcher's EventsTable. C will be called every time a StreamClient
-	// needs to wait for events.
+	// reaches the head of an events table.
 	C() <-chan struct{}
 }
