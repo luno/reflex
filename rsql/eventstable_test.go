@@ -2,6 +2,7 @@ package rsql_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luno/jettison/jtest"
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rsql"
 	"github.com/stretchr/testify/assert"
@@ -478,7 +480,7 @@ func TestInMemNotifier(t *testing.T) {
 		// Insert 1 after lag in cloned table (shared in-memory client)
 		// TODO(corver): adapt inmemNotifier so we can wait for listening to avoid sleep here.
 		time.Sleep(lag)
-		err := insertTestEvent(dbc, table.Clone(), i2s(1), testEventType(1))
+		err := insertTestEvent(dbc, table, i2s(1), testEventType(1))
 		require.NoError(t, err)
 	}()
 
@@ -488,4 +490,31 @@ func TestInMemNotifier(t *testing.T) {
 	require.Equal(t, int64(1), e.ForeignIDInt())
 	require.True(t, time.Since(t0) > lag, "want: %s\ngot: %s", lag, time.Since(t0))
 	require.True(t, time.Since(t0) < 5*time.Second, time.Since(t0))
+}
+
+func TestCloneInserter(t *testing.T) {
+	makeInserter := func(i *int) func(context.Context, *sql.Tx, string, reflex.EventType, []byte) error {
+		return func(context.Context, *sql.Tx, string, reflex.EventType, []byte) error {
+			*i++
+			return nil
+		}
+	}
+
+	var i1 int
+	table1 := rsql.NewEventsTable("test", rsql.WithEventsInserter(makeInserter(&i1)))
+	_, err := table1.Insert(nil, nil, "", nil)
+	jtest.RequireNil(t, err)
+	require.Equal(t, 1, i1)
+
+	table2 := table1.Clone()
+	_, err = table2.Insert(nil, nil, "", nil)
+	jtest.RequireNil(t, err)
+	require.Equal(t, 2, i1)
+
+	var i2 int
+	table3 := table1.Clone(rsql.WithEventsInserter(makeInserter(&i2)))
+	_, err = table3.Insert(nil, nil, "", nil)
+	jtest.RequireNil(t, err)
+	require.Equal(t, 2, i1)
+	require.Equal(t, 1, i2)
 }

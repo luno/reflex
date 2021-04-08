@@ -30,8 +30,10 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 			notifier: &stubNotifier{},
 			backoff:  defaultStreamBackoff,
 		},
+		config: opts,
 	}
-	for _, o := range opts {
+
+	for _, o := range table.config {
 		o(table)
 	}
 
@@ -153,6 +155,7 @@ type inserter func(ctx context.Context, tx *sql.Tx,
 // for a sql db table.
 type EventsTable struct {
 	options
+	config       []EventsOption
 	schema       etableSchema
 	disableCache bool
 	baseLoader   loader
@@ -195,28 +198,13 @@ func (t *EventsTable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreig
 	return t.notifier.Notify, nil
 }
 
-// Clone returns a new etable cloned from the config of t with the new options applied.
-// Note that the stateful fields are not clone, so the cache is not shared.
+// Clone returns a new events table generated from the config of t with the new options applied.
+// Note that non-config fields are not copied, so things like the cache and inmemnotifier
+// are not shared.
 func (t *EventsTable) Clone(opts ...EventsOption) *EventsTable {
-	table := &EventsTable{
-		options:      t.options,
-		schema:       t.schema,
-		disableCache: t.disableCache,
-		baseLoader:   nil,
-	}
-	for _, opt := range opts {
-		opt(table)
-	}
-
-	if table.inserter == nil {
-		table.inserter = makeDefaultInserter(table.schema)
-	}
-
-	table.gapCh = make(chan Gap)
-	table.currentLoader = buildLoader(table.baseLoader, table.gapCh,
-		table.disableCache, table.schema)
-
-	return table
+	clone := append([]EventsOption(nil), t.config...)
+	clone = append(clone, opts...)
+	return NewEventsTable(t.schema.name, clone...)
 }
 
 // Stream implements reflex.StreamFunc and returns a StreamClient that
