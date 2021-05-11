@@ -1,4 +1,4 @@
-package rpatterns
+package reflex
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
-	"github.com/luno/reflex"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/status"
 )
@@ -34,8 +33,8 @@ func TestIsExpected(t *testing.T) {
 			Err:      context.DeadlineExceeded,
 			Expected: true,
 		}, {
-			Name:     "reflex.ErrStopped",
-			Err:      reflex.ErrStopped,
+			Name:     "ErrStopped",
+			Err:      ErrStopped,
 			Expected: true,
 		}, {
 			Name:     "Canceled status",
@@ -56,7 +55,7 @@ func TestIsExpected(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			require.Equal(t, test.Expected, isExpected(test.Err))
+			require.Equal(t, test.Expected, IsExpected(test.Err))
 		})
 	}
 }

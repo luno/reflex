@@ -95,7 +95,7 @@ func (c *consumer) Name() string {
 	return c.name
 }
 
-func (c *consumer) Consume(ctx context.Context, fate fate.Fate,
+func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 	event *Event) error {
 	t0 := time.Now()
 
@@ -110,8 +110,8 @@ func (c *consumer) Consume(ctx context.Context, fate fate.Fate,
 	}
 	c.lagAlertGauge.Set(alert)
 
-	err := c.fn(ctx, fate, event)
-	if err != nil {
+	err := c.fn(ctx, ft, event)
+	if err != nil && !IsExpected(err) {
 		c.errorCounter.Inc()
 	}
 
