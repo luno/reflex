@@ -10,6 +10,7 @@ import (
 
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/log"
+
 	"github.com/luno/reflex"
 )
 
@@ -158,7 +159,8 @@ type ctableSchema struct {
 }
 
 func (t *ctable) GetCursor(ctx context.Context, dbc *sql.DB, consumerID string) (string, error) {
-	return getCursor(ctx, dbc, t.schema, consumerID)
+	value, _, err := getCursor(ctx, dbc, t.schema, consumerID)
+	return value, err
 }
 
 func (t *ctable) SetCursor(ctx context.Context, dbc *sql.DB, consumerID string, cursor string) error {

@@ -11,6 +11,7 @@ import (
 	"github.com/luno/jettison"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
+
 	"github.com/luno/reflex"
 )
 
@@ -174,16 +175,17 @@ func isMySQLErr(err error, nums ...uint16) bool {
 	return false
 }
 
-func getCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema, id string) (string, error) {
+func getCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema, id string) (string, time.Time, error) {
 	var cursor string
-	err := dbc.QueryRowContext(ctx, "select "+schema.cursorField+
-		" from "+schema.name+" where "+schema.idField+"=?", id).Scan(&cursor)
+	var ts time.Time
+	err := dbc.QueryRowContext(ctx, "select "+schema.cursorField+","+schema.timefield+
+		" from "+schema.name+" where "+schema.idField+"=?", id).Scan(&cursor, &ts)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		return "", time.Time{}, nil
 	} else if err != nil {
-		return "", errors.Wrap(err, "query last id error")
+		return "", time.Time{}, errors.Wrap(err, "query last id error")
 	}
-	return cursor, nil
+	return cursor, ts, nil
 }
 
 // setCursor sets the processor's last successfully processed event ID to
@@ -219,6 +221,11 @@ func setCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema,
 	_, err = dbc.ExecContext(ctx, "insert into "+schema.name+" set "+schema.idField+"=?, "+
 		schema.cursorField+"=?, "+schema.timefield+"=now()", id, c)
 	if isMySQLErrDupEntry(err) {
+		// Best effort lookup for improved debugging.
+		existing, updatedAt, getErr := getCursor(ctx, dbc, schema, id)
+		if getErr == nil {
+			opts = append(opts, j.MKV{"existing": existing, "updated_at": updatedAt})
+		}
 		return errors.Wrap(err, "attempted to set cursor <= existing cursor", opts...)
 	} else if err != nil {
 		return errors.Wrap(err, "insert cursor error", opts...)
