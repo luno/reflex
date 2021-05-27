@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luno/reflex/rsql"
 	"github.com/stretchr/testify/require"
+
+	"github.com/luno/reflex/rsql"
 )
 
 func TestNewCursorsTable(t *testing.T) {
@@ -142,6 +143,25 @@ func TestSyncSetCursor(t *testing.T) {
 	require.Equal(t, "10", c)
 
 	require.Equal(t, 0, s.Count())
+}
+
+func TestCloneAsyncCursor(t *testing.T) {
+	dbc := ConnectTestDB(t, "", "cursors")
+	defer dbc.Close()
+
+	s := newTestSleep()
+
+	ct := rsql.NewCursorsTable("cursors").Clone(rsql.WithTestCursorSleep(t, s.Block))
+
+	err := ct.SetCursor(context.Background(), dbc, "test", "10")
+	require.NoError(t, err)
+
+	s.UnblockOnce()
+	waitForResult(t, 2, s.Count)
+
+	c, err := ct.GetCursor(context.Background(), dbc, "test")
+	require.NoError(t, err)
+	require.Equal(t, "10", c)
 }
 
 func newTestSleep() *testSleep {

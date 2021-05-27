@@ -247,10 +247,6 @@ func (t *ctable) Clone(ol ...CursorsOption) CursorsTable {
 		o(table)
 	}
 
-	if table.isAsyncEnabled() {
-		go table.flushForever()
-	}
-
 	return table
 }
 
