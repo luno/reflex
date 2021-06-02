@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	defaultEventIDField        = "id"
 	defaultEventTimeField      = "timestamp"
 	defaultEventTypeField      = "type"
 	defaultEventForeignIDField = "foreign_id"
@@ -71,7 +72,7 @@ func scan(row row) (*reflex.Event, error) {
 
 func getLatestID(ctx context.Context, dbc *sql.DB, schema etableSchema) (int64, error) {
 	var id sql.NullInt64
-	err := dbc.QueryRowContext(ctx, "select max(id) from "+schema.name).Scan(&id)
+	err := dbc.QueryRowContext(ctx, "select max("+schema.idField+") from "+schema.name).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
@@ -86,14 +87,14 @@ func getNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
 		args []interface{}
 	)
 
-	q += "select id, " + schema.foreignIDField + ", " + schema.timeField + ", " + schema.typeField
+	q += "select " + schema.idField + ", " + schema.foreignIDField + ", " + schema.timeField + ", " + schema.typeField
 	if schema.metadataField != "" {
 		q += " , " + schema.metadataField
 	} else {
 		q += ", null"
 	}
 
-	q += " from " + schema.name + " where id>?"
+	q += " from " + schema.name + " where " + schema.idField + ">?"
 	args = append(args, after)
 
 	// TODO(corver): Remove support for lag since we now do this at destination.
@@ -102,7 +103,7 @@ func getNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
 		args = append(args, lag.Seconds())
 	}
 
-	q += " order by id asc limit 1000"
+	q += " order by " + schema.idField + " asc limit 1000"
 
 	rows, err := dbc.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -128,8 +129,8 @@ func GetNextEventsForTesting(t *testing.T, ctx context.Context, dbc *sql.DB,
 	return getNextEvents(ctx, dbc, table.schema, after, lag)
 }
 
-func GetLatestIDForTesting(t *testing.T, ctx context.Context, dbc *sql.DB, eventTable string) (int64, error) {
-	return getLatestID(ctx, dbc, etableSchema{name: eventTable})
+func GetLatestIDForTesting(t *testing.T, ctx context.Context, dbc *sql.DB, eventTable, idField string) (int64, error) {
+	return getLatestID(ctx, dbc, etableSchema{name: eventTable, idField: idField})
 }
 
 // isMySQLErrCantWrite returns true if the error is due to not being able to write

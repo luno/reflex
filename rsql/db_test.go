@@ -11,14 +11,16 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/luno/reflex/rsql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/luno/reflex/rsql"
 )
 
 var (
 	db_test_uri = flag.String("db_test_uri", getDefaultURI(), "Test database uri")
 
+	eventsIDField            = "id"
 	eventsTimeField          = "timestamp"
 	eventsTypeField          = "type"
 	eventsForeignIDField     = "foreign_id"
@@ -38,14 +40,14 @@ const cursorsTable = "cursors"
 
 const eventsSchema = `
 create %s table %s (
-  id bigint not null auto_increment,
+  %s bigint not null auto_increment,
   %s %s not null,
   %s datetime not null,
   %s int not null,
 
   %s
 
-  primary key (id)
+  primary key (%s)
 );`
 
 const eventMetadata = "%s blob null,"
@@ -115,9 +117,9 @@ func createEventsTable(t *testing.T, dbc *sql.DB, name string, temp bool) {
 		metaSchema = fmt.Sprintf(eventMetadata, eventsMetadataField)
 	}
 
-	q := fmt.Sprintf(eventsSchema, tt, name, eventsForeignIDField,
+	q := fmt.Sprintf(eventsSchema, tt, name, eventsIDField, eventsForeignIDField,
 		eventForeignIDFieldTypes[isEventForeignIDInt], eventsTimeField,
-		eventsTypeField, metaSchema)
+		eventsTypeField, metaSchema, eventsIDField)
 
 	_, err := dbc.Exec(q)
 	require.NoError(t, err)
@@ -213,7 +215,7 @@ func TestGetLatestID(t *testing.T) {
 	dbc := ConnectTestDB(t, "events", "")
 	defer dbc.Close()
 
-	id, err := rsql.GetLatestIDForTesting(t, context.Background(), dbc, "events")
+	id, err := rsql.GetLatestIDForTesting(t, context.Background(), dbc, "events", "id")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), id)
 
@@ -223,7 +225,7 @@ func TestGetLatestID(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	id, err = rsql.GetLatestIDForTesting(t, context.Background(), dbc, "events")
+	id, err = rsql.GetLatestIDForTesting(t, context.Background(), dbc, "events", "id")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(n), id)
 }

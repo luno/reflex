@@ -9,6 +9,7 @@ import (
 
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
+
 	"github.com/luno/reflex"
 )
 
@@ -21,6 +22,7 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	table := &EventsTable{
 		schema: etableSchema{
 			name:           name,
+			idField:        defaultEventIDField,
 			timeField:      defaultEventTimeField,
 			typeField:      defaultEventTypeField,
 			foreignIDField: defaultEventForeignIDField,
@@ -49,6 +51,14 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 
 // EventsOption defines a functional option to configure new event tables.
 type EventsOption func(*EventsTable)
+
+// WithEventIDField provides an option to set the event DB ID field. This is
+// useful for tables which implement custom event loaders. It defaults to 'id'.
+func WithEventIDField(field string) EventsOption {
+	return func(table *EventsTable) {
+		table.schema.idField = field
+	}
+}
 
 // WithEventTimeField provides an option to set the event DB timestamp field.
 // It defaults to 'timestamp'.
@@ -176,7 +186,7 @@ type EventsTable struct {
 //       if err != nil {
 //         return err
 //       }
-//	     defer notify()
+//       defer notify()
 //       return doWorkAndCommit(tx)
 func (t *EventsTable) Insert(ctx context.Context, tx *sql.Tx, foreignID string,
 	typ reflex.EventType) (NotifyFunc, error) {
@@ -287,6 +297,7 @@ type options struct {
 // etableSchema defines the mysql schema of an events table.
 type etableSchema struct {
 	name           string
+	idField        string
 	timeField      string
 	typeField      string
 	foreignIDField string

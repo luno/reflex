@@ -13,13 +13,28 @@ func TestTestEventsTable(t *testing.T) {
 	rsql.TestEventsTable(t, dbc, rsql.NewEventsTable(eventsTable))
 }
 
+func TestCustomIDField(t *testing.T) {
+	cache := eventsIDField
+	defer func() {
+		eventsIDField = cache
+	}()
+
+	eventsIDField = "custom_id"
+
+	dbc := ConnectTestDB(t, eventsTable, "")
+	defer dbc.Close()
+
+	rsql.TestEventsTable(t, dbc, rsql.NewEventsTable(eventsTable,
+		rsql.WithEventIDField(eventsIDField)))
+}
+
 func TestCustomTimeField(t *testing.T) {
 	cache := eventsTimeField
 	defer func() {
 		eventsTimeField = cache
 	}()
 
-	eventsTimeField = "timestamp"
+	eventsTimeField = "custom_timestamp"
 
 	dbc := ConnectTestDB(t, eventsTable, "")
 	defer dbc.Close()
