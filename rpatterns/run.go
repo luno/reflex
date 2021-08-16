@@ -17,6 +17,7 @@ import (
 func RunForever(getCtx func() context.Context, req reflex.Spec) {
 	for {
 		ctx := getCtx()
+		ctx = log.ContextWith(ctx, j.KS("consumer", req.Name()))
 
 		err := reflex.Run(ctx, req)
 		if reflex.IsExpected(err) {
@@ -25,8 +26,7 @@ func RunForever(getCtx func() context.Context, req reflex.Spec) {
 			continue
 		}
 
-		log.Error(ctx, errors.Wrap(err, "run forever error"),
-			j.KS("consumer", req.Name()))
+		log.Error(ctx, errors.Wrap(err, "run forever error"))
 		time.Sleep(time.Minute) // 1 min backoff on errors
 	}
 }
@@ -38,6 +38,7 @@ func ConsumeForever(getCtx func() context.Context, consume reflex.ConsumeFunc,
 	consumer reflex.Consumer, opts ...reflex.StreamOption) {
 	for {
 		ctx := getCtx()
+		ctx = log.ContextWith(ctx, j.KS("consumer", consumer.Name()))
 
 		err := consume(ctx, consumer, opts...)
 		if errors.IsAny(err, context.Canceled, reflex.ErrStopped, fate.ErrTempt) {
@@ -46,8 +47,7 @@ func ConsumeForever(getCtx func() context.Context, consume reflex.ConsumeFunc,
 			continue
 		}
 
-		log.Error(ctx, errors.Wrap(err, "consume forever error"),
-			j.KS("consumer", consumer.Name()))
+		log.Error(ctx, errors.Wrap(err, "consume forever error"))
 		time.Sleep(time.Minute) // 1 min backoff on errors
 	}
 }
