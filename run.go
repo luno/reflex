@@ -8,6 +8,7 @@ import (
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
+	"github.com/luno/jettison/log"
 )
 
 // Run executes the spec by streaming events from the current cursor,
@@ -64,6 +65,11 @@ func Run(in context.Context, s Spec) error {
 			return errors.Wrap(err, "recv error")
 		}
 
+		ctx := log.ContextWith(ctx, j.MKS{
+			"event_id":  e.ID,
+			"event_fid": e.ForeignID,
+		})
+
 		// Delay events if lag specified.
 		if delay := lag - since(e.Timestamp); lag > 0 && delay > 0 {
 			t := newTimer(delay)
@@ -76,11 +82,11 @@ func Run(in context.Context, s Spec) error {
 		}
 
 		if err := s.consumer.Consume(ctx, fate.New(), e); err != nil {
-			return errors.Wrap(err, "consume error", j.KV("event", e.ID))
+			return errors.Wrap(err, "consume error")
 		}
 
 		if err := s.cstore.SetCursor(ctx, s.consumer.Name(), e.ID); err != nil {
-			return errors.Wrap(err, "set cursor error", j.KV("event", e.ID))
+			return errors.Wrap(err, "set cursor error")
 		}
 	}
 }
