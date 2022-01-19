@@ -89,14 +89,14 @@ The `github.com/luno/reflex` package provides the main framework API with types 
 
 The `github.com/luno/reflex/rpatterns` package provides patterns for common reflex use-cases.
 
-The following packages provide `reflex.StramFunc` event stream source implementations:
- - [github.com/luno/reflex/rsql](github.com/luno/reflex/rsql]): mysql backed events with `rsql.EventsTable`.
- - [github.com/luno/reflex/rblob](github.com/luno/reflex/rblob]): [gocloud](gocloud.dev/howto/blob/) blob store (S3,GCS) backend events with `rblob.Bucket`. 
- - [experimental] [github.com/corverroos/rscylla](github.com/corverroos/rscylla): [scyllaDB CDC log](docs.scylladb.com/using-scylla/cdc/) backed events.
- - [experimental] [github.com/corverroos/rlift](github.com/corverroos/rlift): [liftbridge](github.com/liftbridge-io/liftbridge) backed events.
+The following packages provide `reflex.StreamFunc` event stream source implementations:
+ - [github.com/luno/reflex/rsql](https://pkg.go.dev/github.com/luno/reflex/rsql): mysql backed events with `rsql.EventsTable`.
+ - [github.com/luno/reflex/rblob](https://pkg.go.dev/github.com/luno/reflex/rblob): [gocloud](https://gocloud.dev/howto/blob/) blob store (S3,GCS) backend events with `rblob.Bucket`. 
+ - [experimental] [github.com/corverroos/rscylla](https://github.com/corverroos/rscylla): [scyllaDB CDC log](https://docs.scylladb.com/using-scylla/cdc/) backed events.
+ - [experimental] [github.com/corverroos/rlift](https://github.com/corverroos/rlift): [liftbridge](https://github.com/liftbridge-io/liftbridge) backed events.
  
 The following packages provide `reflex.CursorStore` cursor store implementations:
  - [github.com/luno/reflex/rsql](github.com/luno/reflex/rsql]): mysql table cursors with `rsql.CursorsTable`.
- - [experimental] [github.com/corverroos/rlift](github.com/corverroos/rlift): [liftbridge](github.com/liftbridge-io/liftbridge) table cursors with `rlift.CursorStore`.
+ - [experimental] [github.com/corverroos/rlift](https://github.com/corverroos/rlift): [liftbridge](https://github.com/liftbridge-io/liftbridge) table cursors with `rlift.CursorStore`.
 
  
