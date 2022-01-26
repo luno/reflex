@@ -26,6 +26,10 @@ const (
 	// HashOptionEventForeignID should result in a good distribution and
 	// guarantees process ordering by foreign id.
 	HashOptionEventForeignID HashOption = 2
+
+	// HashOptionCustomHashFn allows the caller to provide a custom hash function
+	// allowing them to tailor distribution and ordering for specific needs.
+	HashOptionCustomHashFn HashOption = 3
 )
 
 type parallelConfig struct {
@@ -34,6 +38,7 @@ type parallelConfig struct {
 	consumerOpts []reflex.ConsumerOption
 
 	hash HashOption
+	hashFn func(event *reflex.Event) ([]byte, error)
 }
 
 type ParallelOption func(pc *parallelConfig)
@@ -61,7 +66,7 @@ func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.S
 
 	for m := 0; m < n; m++ {
 		m := m
-		consumerM := makeConsumer(conf.hash, m, n, getConsumer(m))
+		consumerM := makeConsumer(conf, m, n, getConsumer(m))
 		gcf := func() context.Context {
 			return getCtx(m)
 		}
@@ -73,17 +78,24 @@ func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.S
 
 // makeConsumer returns consumer m-of-n that will only process events
 // that hash to it.
-func makeConsumer(hash HashOption, m, n int, inner reflex.Consumer) reflex.Consumer {
+func makeConsumer(conf parallelConfig, m, n int, inner reflex.Consumer) reflex.Consumer {
 	hasher := fnv.New32()
 
 	f := func(ctx context.Context, fate fate.Fate, event *reflex.Event) error {
 		var hashKey []byte
-		switch hash {
+		switch conf.hash {
 		case HashOptionEventType:
 			hashKey = []byte(strconv.Itoa(int(event.Type.ReflexType())))
 
 		case HashOptionEventForeignID:
 			hashKey = []byte(event.ForeignID)
+
+		case HashOptionCustomHashFn:
+			var err error
+			hashKey, err = conf.hashFn(event)
+			if err != nil {
+				return err
+			}
 
 		case HashOptionEventID:
 			fallthrough
@@ -130,5 +142,13 @@ func WithStreamOpts(opts ...reflex.StreamOption) ParallelOption {
 func WithHashOption(opt HashOption) ParallelOption {
 	return func(pc *parallelConfig) {
 		pc.hash = opt
+	}
+}
+
+// WithHashFn specifies the custom hash function that will be used to distribute work to parallel
+// consumers when HashOptionCustomHashFn is specified.
+func WithHashFn(fn func(event *reflex.Event)([]byte, error)) ParallelOption {
+	return func(pc *parallelConfig) {
+		pc.hashFn = fn
 	}
 }

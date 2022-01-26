@@ -22,6 +22,7 @@ func TestParallel(t *testing.T) {
 		events   []*reflex.Event
 		expexted map[string][]int64
 		hash     rpatterns.HashOption
+		hashFn	 func(*reflex.Event)([]byte, error)
 	}{
 		{
 			name:   "Hash Event ID",
@@ -58,6 +59,50 @@ func TestParallel(t *testing.T) {
 				"parallel_test_3_of_4": {1, 1, 1},
 			},
 		},
+		{
+			name:   "Hash Event HashFn (Event ID)",
+			n:      4,
+			events: fromIDs(0, 1, 2, 3),
+			hash:   rpatterns.HashOptionCustomHashFn,
+			hashFn: func(event *reflex.Event) ([]byte, error) {
+				return []byte(event.ID), nil
+			},
+			expexted: map[string][]int64{
+				"parallel_test_1_of_4": {3},
+				"parallel_test_2_of_4": {2},
+				"parallel_test_3_of_4": {1},
+				"parallel_test_4_of_4": {0},
+			},
+		},
+		{
+			name:   "Hash Event HashFn (Event Foreign Key)",
+			n:      4,
+			events: fromFIDs(124566, 123412455, 123, 2342, 2304, 140054),
+			hash:   rpatterns.HashOptionCustomHashFn,
+			hashFn: func(event *reflex.Event) ([]byte, error) {
+				return []byte(event.ForeignID), nil
+			},
+			expexted: map[string][]int64{
+				"parallel_test_1_of_4": {2304},
+				"parallel_test_2_of_4": {124566, 140054},
+				"parallel_test_3_of_4": {123412455, 2342},
+				"parallel_test_4_of_4": {123},
+			},
+		},
+		{
+			name:   "Hash Event HashFn (Event Type)",
+			n:      4,
+			events: fromTypes(1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3),
+			hash:   rpatterns.HashOptionCustomHashFn,
+			hashFn: func(event *reflex.Event) ([]byte, error) {
+				return []byte(strconv.Itoa(event.Type.ReflexType())), nil
+			},
+			expexted: map[string][]int64{
+				"parallel_test_1_of_4": {3, 3, 3, 3, 3},
+				"parallel_test_2_of_4": {2, 2, 2, 2},
+				"parallel_test_3_of_4": {1, 1, 1},
+			},
+		},
 	}
 
 	for _, test := range cases {
@@ -83,6 +128,12 @@ func TestParallel(t *testing.T) {
 					i = e.IDInt()
 				case rpatterns.HashOptionEventForeignID:
 					i = e.ForeignIDInt()
+				case rpatterns.HashOptionCustomHashFn:
+					var err error
+					b, err := test.hashFn(e)
+					require.NoError(t, err)
+					i, err = strconv.ParseInt(string(b), 10, 64)
+					require.NoError(t, err)
 				case rpatterns.HashOptionEventType:
 					i = int64(e.Type.ReflexType())
 				}
@@ -103,7 +154,7 @@ func TestParallel(t *testing.T) {
 			}
 
 			rpatterns.Parallel(getCtx, getConsumer, test.n, cursors.Stream,
-				cursors, rpatterns.WithHashOption(test.hash))
+				cursors, rpatterns.WithHashOption(test.hash), rpatterns.WithHashFn(test.hashFn))
 
 			wg.Wait()
 
