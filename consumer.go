@@ -65,28 +65,31 @@ func WithoutConsumerActivityTTL() ConsumerOption {
 	}
 }
 
+func labels(name string) prometheus.Labels {
+	return prometheus.Labels{consumerLabel: name}
+}
+
 // NewConsumer returns a new instrumented consumer of events.
 func NewConsumer(name string, fn func(context.Context, fate.Fate, *Event) error,
 	opts ...ConsumerOption) Consumer {
 
-	labels := prometheus.Labels{consumerLabel: name}
+	ls := labels(name)
 
 	c := &consumer{
 		fn:            fn,
 		name:          name,
 		lagAlert:      defaultLagAlert,
 		activityTTL:   defaultActivityTTL,
-		lagGauge:      consumerLag.With(labels),
-		lagAlertGauge: consumerLagAlert.With(labels),
-		errorCounter:  consumerErrors.With(labels),
-		latencyHist:   consumerLatency.With(labels),
+		lagAlertGauge: consumerLagAlert.With(ls),
+		errorCounter:  consumerErrors.With(ls),
+		latencyHist:   consumerLatency.With(ls),
 	}
 
 	for _, o := range opts {
 		o(c)
 	}
 
-	c.activityKey = consumerActivityGauge.Register(labels, c.activityTTL)
+	c.activityKey = consumerActivityGauge.Register(ls, c.activityTTL)
 
 	return c
 }
@@ -121,8 +124,14 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 	return err
 }
 
+// Reset the consumer, create metrics ready for Consume
+func (c *consumer) Reset() error {
+	c.lagGauge = consumerLag.With(labels(c.name))
+	return nil
+}
+
+// Stop the consumer, discard metrics
 func (c *consumer) Stop() error {
-	labels := prometheus.Labels{consumerLabel: c.name}
-	consumerLag.Delete(labels)
+	consumerLag.Delete(labels(c.name))
 	return nil
 }
