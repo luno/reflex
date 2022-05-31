@@ -104,3 +104,15 @@ func fetchMetrics() []prometheus.Metric {
 	}
 	return ret
 }
+
+func TestConsumeFromFresh(t *testing.T) {
+	c := NewConsumer("test",
+		func(context.Context, fate.Fate, *Event) error { return nil },
+	)
+	err := c.Consume(context.Background(), fate.New(), &Event{
+		ID:        "1",
+		Type:      sType(1),
+		Timestamp: time.Now(),
+	})
+	jtest.RequireNil(t, err)
+}

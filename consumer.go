@@ -88,9 +88,8 @@ func NewConsumer(name string, fn func(context.Context, fate.Fate, *Event) error,
 	for _, o := range opts {
 		o(c)
 	}
-
 	c.activityKey = consumerActivityGauge.Register(ls, c.activityTTL)
-
+	_ = c.Reset()
 	return c
 }
 
