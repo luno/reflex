@@ -59,6 +59,11 @@ func Run(in context.Context, s Spec) error {
 		defer closer.Close()
 	}
 
+	// Check if the consumer requires stopping.
+	if s, ok := s.consumer.(stopper); ok {
+		defer s.Stop()
+	}
+
 	for {
 		e, err := sc.Recv()
 		if err != nil {

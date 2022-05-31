@@ -120,3 +120,9 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 
 	return err
 }
+
+func (c *consumer) Stop() error {
+	labels := prometheus.Labels{consumerLabel: c.name}
+	consumerLag.Delete(labels)
+	return nil
+}

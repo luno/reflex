@@ -108,9 +108,15 @@ type Consumer interface {
 }
 
 // resetter is an optional interface that a consumer can implement indicating
-// that it is stateful and requires reset at the start of each run.
+// that it is stateful and requires reset at the start of each Run.
 type resetter interface {
 	Reset() error
+}
+
+// stopper is an optional interface that a consumer can implement indicating
+// that it has clean up work to do at the end of each Run.
+type stopper interface {
+	Stop() error
 }
 
 // StreamClient is a stream interface providing subsequent events on calls to Recv.
