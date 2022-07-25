@@ -18,6 +18,19 @@ var (
 		Help:      "Lag between now and the current event timestamp in seconds",
 	}, []string{consumerLabel})
 
+	consumerAge = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "reflex",
+		Subsystem: "consumer",
+		Name:      "event_age_seconds",
+		Help:      "The age of events that are being processed by the consumer",
+		Buckets: []float64{
+			0.1, .25, .5, 1, 2.5, 5,
+			10, 25, 50, 100, 250, 500, // ~10 minutes
+			1_000, 2_500, 5_000, 10_000, 25_000, 50_000, // ~13 hours
+			100_000, // > 1 day
+		},
+	}, []string{consumerLabel})
+
 	consumerLagAlert = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
@@ -51,11 +64,14 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(consumerLagAlert)
-	prometheus.MustRegister(consumerLag)
-	prometheus.MustRegister(consumerLatency)
-	prometheus.MustRegister(consumerErrors)
-	prometheus.MustRegister(consumerActivityGauge)
+	prometheus.MustRegister(
+		consumerActivityGauge,
+		consumerAge,
+		consumerErrors,
+		consumerLag,
+		consumerLagAlert,
+		consumerLatency,
+	)
 }
 
 func newActivityGauge(g *prometheus.GaugeVec) *activityGauge {

@@ -17,6 +17,7 @@ type consumer struct {
 	lagAlert    time.Duration
 	activityTTL time.Duration
 
+	ageHist       prometheus.Observer
 	lagGauge      prometheus.Gauge
 	lagAlertGauge prometheus.Gauge
 	errorCounter  prometheus.Counter
@@ -80,6 +81,7 @@ func NewConsumer(name string, fn func(context.Context, fate.Fate, *Event) error,
 		name:          name,
 		lagAlert:      defaultLagAlert,
 		activityTTL:   defaultActivityTTL,
+		ageHist:       consumerAge.With(ls),
 		lagAlertGauge: consumerLagAlert.With(ls),
 		errorCounter:  consumerErrors.With(ls),
 		latencyHist:   consumerLatency.With(ls),
@@ -105,6 +107,7 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 
 	lag := t0.Sub(event.Timestamp)
 	c.lagGauge.Set(lag.Seconds())
+	c.ageHist.Observe(lag.Seconds())
 
 	alert := 0.0
 	if lag > c.lagAlert && c.lagAlert > 0 {
