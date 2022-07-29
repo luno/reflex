@@ -44,3 +44,11 @@ func WithStreamLag(d time.Duration) StreamOption {
 		sc.Lag = d
 	}
 }
+
+func ResolveOptions(options ...StreamOption) StreamOptions {
+	var ret StreamOptions
+	for _, opt := range options {
+		opt(&ret)
+	}
+	return ret
+}

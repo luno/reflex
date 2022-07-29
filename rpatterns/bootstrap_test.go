@@ -2,7 +2,6 @@ package rpatterns_test
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -11,9 +10,10 @@ import (
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rpatterns"
-	"github.com/stretchr/testify/assert"
 )
 
 var errCursor = errors.New("no more cursors", j.C("ERR_547c6f344dce327a"))
@@ -89,10 +89,10 @@ func TestBootstrap(t *testing.T) {
 
 			assert.EqualValues(t, test.sets, b.sets)
 			assert.EqualValues(t, test.afters, b.afters)
-			assert.Len(t, b.opts, len(test.opts))
-			for i, opt := range b.opts {
-				assert.Equal(t, fmt.Sprint(test.opts[i]), fmt.Sprint(opt))
-			}
+
+			expOpts := reflex.ResolveOptions(test.opts...)
+			actOpts := reflex.ResolveOptions(b.opts...)
+			assert.Equal(t, expOpts, actOpts)
 		})
 	}
 }
