@@ -45,9 +45,10 @@ func (b *bestEffort) consume(ctx context.Context, f fate.Fate, e *reflex.Event) 
 		if b.retryCount > b.retries {
 			b.retryCount = 0
 			b.retryID = ""
-			log.Error(ctx, errors.Wrap(err, "best effort consumer ignoring error"),
-				j.KS("consumer", b.name))
-
+			if !reflex.IsExpected(err) {
+				log.Error(ctx, errors.Wrap(err, "best effort consumer ignoring error"),
+					j.KS("consumer", b.name))
+			}
 			return nil
 		}
 
