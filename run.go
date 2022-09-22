@@ -87,11 +87,17 @@ func Run(in context.Context, s Spec) error {
 		}
 
 		if err := s.consumer.Consume(ctx, fate.New(), e); err != nil {
-			return errors.Wrap(err, "consume error")
+			return errors.Wrap(err, "consume error", j.MKS{
+				"event_id":  e.ID,
+				"event_fid": e.ForeignID,
+			})
 		}
 
 		if err := s.cstore.SetCursor(ctx, s.consumer.Name(), e.ID); err != nil {
-			return errors.Wrap(err, "set cursor error")
+			return errors.Wrap(err, "set cursor error", j.MKS{
+				"event_id":  e.ID,
+				"event_fid": e.ForeignID,
+			})
 		}
 	}
 }
