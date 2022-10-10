@@ -8,16 +8,16 @@ import (
 )
 
 // ReadThroughCursorStore provides a cursor store that queries the fallback
-// cursor store if the cursor is not found in the primary. It always writes
-// to the primary.
+// cursor store if the cursor is not found in the primary. It writes the cursor
+// value to the primary if not. Cursor updates always go directly to the primary.
 //
 // Use cases:
-//  - Migrating cursor stores: Use the new cursor store as the primary
-//    and the old cursor store as the fallback. Revert to just the new
-//    cursor store after the migration.
-//  - Programmatic seeding of a cursor: Use a MemCursorStore with the cursor
-//    seeded by WithMemCursor as the fallback and the target cursor store as the primary.
-//    Revert to just the target cursor store afterwards.
+//   - Migrating cursor stores: Use the new cursor store as the primary
+//     and the old cursor store as the fallback. Revert to just the new
+//     cursor store after the migration.
+//   - Programmatic seeding of a cursor: Use a MemCursorStore with the cursor
+//     seeded by WithMemCursor as the fallback and the target cursor store as the primary.
+//     Revert to just the target cursor store afterwards.
 func ReadThroughCursorStore(primary, fallback reflex.CursorStore) reflex.CursorStore {
 	return &readThroughCursorStore{CursorStore: primary, fallback: fallback}
 }
@@ -27,27 +27,45 @@ type readThroughCursorStore struct {
 	fallback           reflex.CursorStore
 }
 
-func (c *readThroughCursorStore) GetCursor(ctx context.Context, consumerName string,
-) (string, error) {
-
+func (c *readThroughCursorStore) GetCursor(ctx context.Context, consumerName string) (string, error) {
+	// Attempt to read from the primary.
 	cursor, err := c.CursorStore.GetCursor(ctx, consumerName)
 	if err != nil {
 		return "", err
 	}
 
+	// The cursor is in the primary, so we can return it.
 	if cursor != "" {
 		return cursor, nil
 	}
 
-	return c.fallback.GetCursor(ctx, consumerName)
+	// Otherwise get the cursor from the fallback...
+	cursor, err = c.fallback.GetCursor(ctx, consumerName)
+	if err != nil {
+		return "", err
+	} else if cursor == "" {
+		return cursor, nil
+	}
+
+	// ...and write the cursor to the primary.
+	//
+	// This could lead to a race condition - we might have called SetCursor()
+	// with a later cursor value since the first GetCursor() call. This
+	// SetCursor() may then fail, but on retry the first GetCursor() will
+	// return a value.
+	if err := c.CursorStore.SetCursor(ctx, consumerName, cursor); err != nil {
+		return "", err
+	}
+
+	return cursor, nil
 }
 
 // MemCursorStore returns an in-memory cursor store. Note that it obviously
 // does not provide any persistence guarantees.
 //
 // Use cases:
-//  - Testing
-//  - Programmatic seeding of a cursor: See ReadThroughCursorStore above.
+//   - Testing
+//   - Programmatic seeding of a cursor: See ReadThroughCursorStore above.
 func MemCursorStore(opts ...memOpt) reflex.CursorStore {
 	res := &memCursorStore{cursors: make(map[string]string)}
 	for _, opt := range opts {

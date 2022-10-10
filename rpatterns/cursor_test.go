@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"github.com/luno/jettison/jtest"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rpatterns"
 	"github.com/luno/reflex/testmock"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 func TestReadthroughCursorStore_GetCursor(t *testing.T) {
@@ -52,6 +53,7 @@ func TestReadthroughCursorStore_GetCursor(t *testing.T) {
 			},
 			newCursorStoreCalls: []*mock.Call{
 				new(testmock.CursorStore).On("GetCursor", ctx, consumerName).Return("", nil),
+				new(testmock.CursorStore).On("SetCursor", ctx, consumerName, cursor).Return(nil),
 			},
 			expected: cursor,
 		},
