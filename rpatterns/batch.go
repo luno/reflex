@@ -8,6 +8,7 @@ import (
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/log"
+
 	"github.com/luno/reflex"
 )
 
@@ -57,6 +58,8 @@ func (c *BatchConsumer) Reset() error {
 	defer c.mu.Unlock()
 
 	c.buf = nil
+	batchConsumerBufferLength.WithLabelValues(c.name).Set(0)
+
 	if c.err != nil {
 		err := c.err
 		c.err = nil
@@ -104,6 +107,7 @@ func (c *BatchConsumer) enqueue(ctx context.Context, f fate.Fate, e *AckEvent) e
 	}
 
 	c.buf = append(c.buf, e)
+	batchConsumerBufferLength.WithLabelValues(c.name).Set(float64(len(c.buf)))
 
 	select {
 	case c.trigger <- struct{}{}:
@@ -133,6 +137,7 @@ func (c *BatchConsumer) flushForever() {
 		// Time to flush
 		buf := c.buf
 		c.buf = nil
+		batchConsumerBufferLength.WithLabelValues(c.name).Set(0)
 		c.start = time.Time{}
 
 		var (
