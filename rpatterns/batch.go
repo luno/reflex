@@ -118,9 +118,12 @@ func (c *BatchConsumer) enqueue(ctx context.Context, f fate.Fate, e *AckEvent) e
 }
 
 func (c *BatchConsumer) flushForever() {
+	flushTicker := time.NewTicker(flushSleep)
+	defer flushTicker.Stop()
+
 	for {
 		select {
-		case <-time.After(flushSleep):
+		case <-flushTicker.C:
 		case <-c.trigger:
 		}
 
