@@ -103,6 +103,7 @@ func (c *BatchConsumer) enqueue(ctx context.Context, f fate.Fate, e *AckEvent) e
 	}
 
 	if !c.flushStarted {
+		c.flushStarted = true
 		go c.flushForever()
 	}
 
