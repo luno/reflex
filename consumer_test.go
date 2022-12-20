@@ -11,6 +11,8 @@ import (
 	"github.com/luno/jettison/jtest"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/luno/reflex/internal/metrics"
 )
 
 type stream int64
@@ -96,7 +98,7 @@ func TestReuseConsumer(t *testing.T) {
 
 func fetchMetrics() []prometheus.Metric {
 	ch := make(chan prometheus.Metric, 100)
-	consumerLag.Collect(ch)
+	metrics.ConsumerLag.Collect(ch)
 	close(ch)
 	ret := make([]prometheus.Metric, 0, len(ch))
 	for m := range ch {

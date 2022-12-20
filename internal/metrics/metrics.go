@@ -1,4 +1,4 @@
-package reflex
+package metrics
 
 import (
 	"strings"
@@ -10,15 +10,19 @@ import (
 
 const consumerLabel = "consumer_name"
 
+func Labels(name string) prometheus.Labels {
+	return prometheus.Labels{consumerLabel: name}
+}
+
 var (
-	consumerLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ConsumerLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
 		Name:      "lag_seconds",
 		Help:      "Lag between now and the current event timestamp in seconds",
 	}, []string{consumerLabel})
 
-	consumerAge = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	ConsumerAge = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
 		Name:      "event_age_seconds",
@@ -31,14 +35,14 @@ var (
 		},
 	}, []string{consumerLabel})
 
-	consumerLagAlert = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ConsumerLagAlert = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
 		Name:      "lag_alert",
 		Help:      "Whether or not the consumer lag crosses its alert threshold",
 	}, []string{consumerLabel})
 
-	consumerActivityGauge = newActivityGauge(
+	ConsumerActivityGauge = newActivityGauge(
 		prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: "reflex",
 			Subsystem: "consumer",
@@ -47,7 +51,7 @@ var (
 				"in the activity ttl period",
 		}, []string{consumerLabel}))
 
-	consumerLatency = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	ConsumerLatency = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
 		Name:      "latency_seconds",
@@ -55,7 +59,7 @@ var (
 		Buckets:   []float64{0.001, 0.01, 0.1, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0},
 	}, []string{consumerLabel})
 
-	consumerErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
+	ConsumerErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
 		Name:      "error_count",
@@ -65,12 +69,12 @@ var (
 
 func init() {
 	prometheus.MustRegister(
-		consumerActivityGauge,
-		consumerAge,
-		consumerErrors,
-		consumerLag,
-		consumerLagAlert,
-		consumerLatency,
+		ConsumerLag,
+		ConsumerAge,
+		ConsumerLagAlert,
+		ConsumerActivityGauge,
+		ConsumerLatency,
+		ConsumerErrors,
 	)
 }
 

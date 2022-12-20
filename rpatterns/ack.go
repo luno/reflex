@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/luno/fate"
+
 	"github.com/luno/reflex"
 )
 

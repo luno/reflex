@@ -1,4 +1,4 @@
-package reflex
+package metrics
 
 import (
 	"testing"

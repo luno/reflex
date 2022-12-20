@@ -6,6 +6,8 @@ import (
 
 	"github.com/luno/fate"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/luno/reflex/internal/metrics"
 )
 
 const defaultLagAlert = 30 * time.Minute
@@ -66,31 +68,27 @@ func WithoutConsumerActivityTTL() ConsumerOption {
 	}
 }
 
-func labels(name string) prometheus.Labels {
-	return prometheus.Labels{consumerLabel: name}
-}
-
 // NewConsumer returns a new instrumented consumer of events.
 func NewConsumer(name string, fn func(context.Context, fate.Fate, *Event) error,
 	opts ...ConsumerOption) Consumer {
 
-	ls := labels(name)
+	ls := metrics.Labels(name)
 
 	c := &consumer{
 		fn:            fn,
 		name:          name,
 		lagAlert:      defaultLagAlert,
 		activityTTL:   defaultActivityTTL,
-		ageHist:       consumerAge.With(ls),
-		lagAlertGauge: consumerLagAlert.With(ls),
-		errorCounter:  consumerErrors.With(ls),
-		latencyHist:   consumerLatency.With(ls),
+		ageHist:       metrics.ConsumerAge.With(ls),
+		lagAlertGauge: metrics.ConsumerLagAlert.With(ls),
+		errorCounter:  metrics.ConsumerErrors.With(ls),
+		latencyHist:   metrics.ConsumerLatency.With(ls),
 	}
 
 	for _, o := range opts {
 		o(c)
 	}
-	c.activityKey = consumerActivityGauge.Register(ls, c.activityTTL)
+	c.activityKey = metrics.ConsumerActivityGauge.Register(ls, c.activityTTL)
 	_ = c.Reset()
 	return c
 }
@@ -103,7 +101,7 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 	event *Event) error {
 	t0 := time.Now()
 
-	consumerActivityGauge.SetActive(c.activityKey)
+	metrics.ConsumerActivityGauge.SetActive(c.activityKey)
 
 	lag := t0.Sub(event.Timestamp)
 	c.lagGauge.Set(lag.Seconds())
@@ -128,12 +126,12 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 
 // Reset the consumer, create metrics ready for Consume
 func (c *consumer) Reset() error {
-	c.lagGauge = consumerLag.With(labels(c.name))
+	c.lagGauge = metrics.ConsumerLag.With(metrics.Labels(c.name))
 	return nil
 }
 
 // Stop the consumer, discard metrics
 func (c *consumer) Stop() error {
-	consumerLag.Delete(labels(c.name))
+	metrics.ConsumerLag.Delete(metrics.Labels(c.name))
 	return nil
 }
