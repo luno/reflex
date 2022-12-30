@@ -2,11 +2,10 @@ package rpatterns
 
 import (
 	"context"
-	"hash/fnv"
-	"strconv"
-
 	"github.com/luno/fate"
 	"github.com/luno/reflex"
+	"hash/fnv"
+	"strconv"
 )
 
 // HashOption the different hashing option to spread work over consumers.
@@ -37,21 +36,21 @@ type parallelConfig struct {
 	streamOpts   []reflex.StreamOption
 	consumerOpts []reflex.ConsumerOption
 
-	hash HashOption
+	hash   HashOption
 	hashFn func(event *reflex.Event) ([]byte, error)
 }
 
 type ParallelOption func(pc *parallelConfig)
 type getCtxFn = func(m int) context.Context
 type getConsumerFn = func(m int) reflex.Consumer
+type getAckConsumerFn = func(m int) AckConsumer
 
 // Parallel starts N consumers which consume the stream in parallel. Each event
 // is consistently hashed to a consumer using the field specified in HashOption.
 // Role scheduling combined with an appropriate getCtxFn can be used to
 // implement distributed parallel consuming.
 //
-// NOTE: N should preferably be a power of 2, and modifying N will reset the
-//       cursors.
+// NOTE: N should preferably be a power of 2, and modifying N will reset the cursors.
 func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.StreamFunc,
 	cstore reflex.CursorStore, opts ...ParallelOption) {
 
@@ -76,13 +75,57 @@ func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.S
 	}
 }
 
+// ParallelAck starts N consumers which consume the stream in parallel. Each event
+// is consistently hashed to a consumer using the field specified in HashOption.
+// Role scheduling combined with an appropriate getCtxFn can be used to
+// implement distributed parallel consuming. Events must be acked manually.
+//
+// NOTE: N should preferably be a power of 2, and modifying N will reset the
+// cursors.
+func ParallelAck(getCtx getCtxFn, getConsumer getAckConsumerFn, n int, stream reflex.StreamFunc, opts ...ParallelOption) {
+
+	conf := parallelConfig{
+		n:    n,
+		hash: HashOptionEventID,
+	}
+
+	for _, o := range opts {
+		o(&conf)
+	}
+
+	for m := 0; m < n; m++ {
+		m := m
+		consumerM := makeAckConsumer(conf, m, n, getConsumer(m))
+		gcf := func() context.Context {
+			return getCtx(m)
+		}
+
+		spec := NewAckSpec(stream, consumerM, conf.streamOpts...)
+		go RunForever(gcf, spec)
+	}
+}
+
 // makeConsumer returns consumer m-of-n that will only process events
 // that hash to it.
 func makeConsumer(conf parallelConfig, m, n int, inner reflex.Consumer) reflex.Consumer {
-	hasher := fnv.New32()
+	checkShard := makeShardCheckingFunc(conf, n)
 
 	f := func(ctx context.Context, fate fate.Fate, event *reflex.Event) error {
+		if isInShard, err := checkShard(m, event); !isInShard || err != nil {
+			return err
+		}
+		return inner.Consume(ctx, fate, event)
+	}
+
+	return simpleConsumer{name: inner.Name(), consumeFn: f}
+}
+
+func makeShardCheckingFunc(conf parallelConfig, shardCount int) func(currentShard int, event *reflex.Event) (bool, error) {
+	hasher := fnv.New32()
+
+	return func(currentShard int, event *reflex.Event) (bool, error) {
 		var hashKey []byte
+
 		switch conf.hash {
 		case HashOptionEventType:
 			hashKey = []byte(strconv.Itoa(int(event.Type.ReflexType())))
@@ -94,7 +137,7 @@ func makeConsumer(conf parallelConfig, m, n int, inner reflex.Consumer) reflex.C
 			var err error
 			hashKey, err = conf.hashFn(event)
 			if err != nil {
-				return err
+				return false, err
 			}
 
 		case HashOptionEventID:
@@ -107,17 +150,26 @@ func makeConsumer(conf parallelConfig, m, n int, inner reflex.Consumer) reflex.C
 		hasher.Reset()
 		_, err := hasher.Write(hashKey)
 		if err != nil {
+			return false, err
+		}
+
+		return hasher.Sum32()%uint32(shardCount) == uint32(currentShard), nil
+	}
+}
+
+// makeAckConsumer returns consumer m-of-n that will only process events
+// that hash to it. Events must be acked manually.
+func makeAckConsumer(conf parallelConfig, m, n int, inner AckConsumer) *AckConsumer {
+	checkShard := makeShardCheckingFunc(conf, n)
+
+	f := func(ctx context.Context, fate fate.Fate, event *AckEvent) error {
+		if isInShard, err := checkShard(m, &event.Event); !isInShard || err != nil {
 			return err
 		}
-
-		hash := hasher.Sum32()
-		if hash%uint32(n) != uint32(m) {
-			return nil
-		}
-		return inner.Consume(ctx, fate, event)
+		return inner.Consume(ctx, fate, &event.Event)
 	}
 
-	return simpleConsumer{name: inner.Name(), consumeFn: f}
+	return NewAckConsumer(inner.Name(), inner.cstore, f)
 }
 
 type simpleConsumer struct {
@@ -147,7 +199,7 @@ func WithHashOption(opt HashOption) ParallelOption {
 
 // WithHashFn specifies the custom hash function that will be used to distribute work to parallel
 // consumers when HashOptionCustomHashFn is specified.
-func WithHashFn(fn func(event *reflex.Event)([]byte, error)) ParallelOption {
+func WithHashFn(fn func(event *reflex.Event) ([]byte, error)) ParallelOption {
 	return func(pc *parallelConfig) {
 		pc.hashFn = fn
 	}
