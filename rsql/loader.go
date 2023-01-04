@@ -42,6 +42,24 @@ func makeBaseLoader(schema etableSchema) loader {
 	}
 }
 
+// wrapFilter default filter that wraps a loader and returns a filterLoader
+// does not have logic of its own.
+func wrapFilter(loader loader) filterLoader {
+	return func(ctx context.Context, dbc *sql.DB,
+		prev int64, lag time.Duration) ([]*reflex.Event, int64, error) {
+
+		el, err := loader(ctx, dbc, prev, lag)
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(el) == 0 {
+			// No new events
+			return nil, prev, nil
+		}
+		return el, 0, nil
+	}
+}
+
 // wrapNoopFilter returns a filterloader that filters out all noop events returned
 // by the provided loader. Noops are required to ensure at-least-once event consistency for
 // event streams in the face of long running transactions. Consumers however

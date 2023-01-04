@@ -17,6 +17,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestWithIncludeNoopEvents(t *testing.T) {
+	ctx := context.Background()
+
+	table := rsql.NewEventsTable(
+		eventsTable,
+		rsql.WithEventsBackoff(time.Millisecond),
+		rsql.WithIncludeNoopEvents(),
+	)
+
+	dbc, close := ConnectAndCloseTestDB(t, eventsTable, "")
+	defer close()
+
+	rsql.FillGaps(dbc, table)
+
+	// Insert 1
+	err := insertTestEvent(dbc, table, "1", testEventType(1))
+	require.NoError(t, err)
+
+	tx, err := dbc.Begin()
+	require.NoError(t, err)
+
+	// Gap at 2
+	_, err = table.Insert(ctx, tx, "2", testEventType(2))
+	require.NoError(t, err)
+
+	// Rollback insert, should cause gap filler to pick it up
+	err = tx.Rollback()
+	require.NoError(t, err)
+
+	// Insert 3
+	err = insertTestEvent(dbc, table, "3", testEventType(3))
+	require.NoError(t, err)
+
+	// Stop a bad test from hanging
+	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+
+	sc, err := table.ToStream(dbc)(ctx, "")
+	assert.NoError(t, err)
+
+	// This should block until delay, then return 3 (noop(2) is filtered out).
+	assertEvent(t, sc, 1, -2, 3)
+}
+
 func TestGapRollbackDetection(t *testing.T) {
 	table := rsql.NewEventsTable(eventsTable, rsql.WithEventsBackoff(time.Millisecond))
 

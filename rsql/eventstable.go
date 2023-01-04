@@ -44,7 +44,7 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	}
 
 	table.gapCh = make(chan Gap)
-	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.disableCache, table.schema)
+	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.disableCache, table.schema, table.includeNoopEvents)
 
 	return table
 }
@@ -122,6 +122,14 @@ func WithEventsCacheEnabled() EventsOption {
 	}
 }
 
+// WithIncludeNoopEvents noop events are not streamed by default. Use this option to enable
+// the streaming of noop events
+func WithIncludeNoopEvents() EventsOption {
+	return func(table *EventsTable) {
+		table.includeNoopEvents = true
+	}
+}
+
 // WithoutEventsCache provides an option to disable the read-through
 // cache on the events table.
 func WithoutEventsCache() EventsOption {
@@ -165,11 +173,12 @@ type inserter func(ctx context.Context, tx *sql.Tx,
 // for a sql db table.
 type EventsTable struct {
 	options
-	config       []EventsOption
-	schema       etableSchema
-	disableCache bool
-	baseLoader   loader
-	inserter     inserter
+	config            []EventsOption
+	schema            etableSchema
+	disableCache      bool
+	includeNoopEvents bool
+	baseLoader        loader
+	inserter          inserter
 
 	// Stateful fields not cloned
 	currentLoader filterLoader
@@ -275,7 +284,7 @@ func (t *EventsTable) getSchema() etableSchema {
 }
 
 // buildLoader returns a new layered event loader.
-func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema etableSchema) filterLoader {
+func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema etableSchema, withNoopEvents bool) filterLoader {
 	if baseLoader == nil {
 		baseLoader = makeBaseLoader(schema)
 	}
@@ -283,7 +292,12 @@ func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema eta
 	if !disableCache /* ie. enableCache */ {
 		loader = newRCache(loader, schema.name).Load
 	}
-	return wrapNoopFilter(loader)
+
+	if !withNoopEvents {
+		return wrapNoopFilter(loader)
+	} else {
+		return wrapFilter(loader)
+	}
 }
 
 // options define config/state defined in EventsTable used by the streamclients.
