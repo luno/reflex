@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/luno/fate"
+	"github.com/stretchr/testify/require"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rpatterns"
-	"github.com/stretchr/testify/require"
 )
 
 var pMutex = sync.Mutex{}
@@ -22,7 +23,7 @@ func TestParallel(t *testing.T) {
 		events   []*reflex.Event
 		expexted map[string][]int64
 		hash     rpatterns.HashOption
-		hashFn	 func(*reflex.Event)([]byte, error)
+		hashFn   func(*reflex.Event) ([]byte, error)
 	}{
 		{
 			name:   "Hash Event ID",
@@ -63,7 +64,6 @@ func TestParallel(t *testing.T) {
 			name:   "Hash Event HashFn (Event ID)",
 			n:      4,
 			events: fromIDs(0, 1, 2, 3),
-			hash:   rpatterns.HashOptionCustomHashFn,
 			hashFn: func(event *reflex.Event) ([]byte, error) {
 				return []byte(event.ID), nil
 			},
@@ -78,7 +78,6 @@ func TestParallel(t *testing.T) {
 			name:   "Hash Event HashFn (Event Foreign Key)",
 			n:      4,
 			events: fromFIDs(124566, 123412455, 123, 2342, 2304, 140054),
-			hash:   rpatterns.HashOptionCustomHashFn,
 			hashFn: func(event *reflex.Event) ([]byte, error) {
 				return []byte(event.ForeignID), nil
 			},
@@ -93,7 +92,6 @@ func TestParallel(t *testing.T) {
 			name:   "Hash Event HashFn (Event Type)",
 			n:      4,
 			events: fromTypes(1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3),
-			hash:   rpatterns.HashOptionCustomHashFn,
 			hashFn: func(event *reflex.Event) ([]byte, error) {
 				return []byte(strconv.Itoa(event.Type.ReflexType())), nil
 			},
@@ -123,19 +121,21 @@ func TestParallel(t *testing.T) {
 				defer wg.Done()
 
 				var i int64
-				switch test.hash {
-				case rpatterns.HashOptionEventID:
-					i = e.IDInt()
-				case rpatterns.HashOptionEventForeignID:
-					i = e.ForeignIDInt()
-				case rpatterns.HashOptionCustomHashFn:
+				if test.hashFn != nil {
 					var err error
 					b, err := test.hashFn(e)
 					require.NoError(t, err)
 					i, err = strconv.ParseInt(string(b), 10, 64)
 					require.NoError(t, err)
-				case rpatterns.HashOptionEventType:
-					i = int64(e.Type.ReflexType())
+				} else {
+					switch test.hash {
+					case rpatterns.HashOptionEventID:
+						i = e.IDInt()
+					case rpatterns.HashOptionEventForeignID:
+						i = e.ForeignIDInt()
+					case rpatterns.HashOptionEventType:
+						i = int64(e.Type.ReflexType())
+					}
 				}
 				res[ctx.Value("thread").(string)] = append(res[ctx.Value("thread").(string)], i)
 				return nil

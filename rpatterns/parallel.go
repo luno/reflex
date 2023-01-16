@@ -2,10 +2,13 @@ package rpatterns
 
 import (
 	"context"
-	"github.com/luno/fate"
-	"github.com/luno/reflex"
+	"fmt"
 	"hash/fnv"
 	"strconv"
+
+	"github.com/luno/fate"
+
+	"github.com/luno/reflex"
 )
 
 // HashOption the different hashing option to spread work over consumers.
@@ -28,6 +31,7 @@ const (
 
 	// HashOptionCustomHashFn allows the caller to provide a custom hash function
 	// allowing them to tailor distribution and ordering for specific needs.
+	// Deprecated: Only need to use WithHashFn
 	HashOptionCustomHashFn HashOption = 3
 )
 
@@ -36,14 +40,135 @@ type parallelConfig struct {
 	streamOpts   []reflex.StreamOption
 	consumerOpts []reflex.ConsumerOption
 
-	hash   HashOption
-	hashFn func(event *reflex.Event) ([]byte, error)
+	fmtName func(string, int, int) string
+	hashFn  func(event *reflex.Event) ([]byte, error)
+}
+
+func getParallelConfig(opts []ParallelOption) parallelConfig {
+	c := parallelConfig{
+		fmtName: appendMofN,
+		hashFn:  keyByEventID,
+	}
+	for _, o := range opts {
+		o(&c)
+	}
+	return c
 }
 
 type ParallelOption func(pc *parallelConfig)
 type getCtxFn = func(m int) context.Context
 type getConsumerFn = func(m int) reflex.Consumer
 type getAckConsumerFn = func(m int) AckConsumer
+
+type ConsumerShard struct {
+	Name   string
+	filter EventFilter
+}
+
+func (s ConsumerShard) GetFilter() EventFilter {
+	return s.filter
+}
+
+type eventKeyFn func(event *reflex.Event) ([]byte, error)
+type EventFilter func(event *reflex.Event) (bool, error)
+
+func filterOnHash(m, n int, keyFn eventKeyFn) EventFilter {
+	hsh := fnv.New32()
+	return func(event *reflex.Event) (bool, error) {
+		hsh.Reset()
+		key, err := keyFn(event)
+		if err != nil {
+			return false, err
+		}
+		_, err = hsh.Write(key)
+		if err != nil {
+			return false, err
+		}
+
+		hash := hsh.Sum32()
+		return hash%uint32(n) == uint32(m), nil
+	}
+}
+
+func appendMofN(base string, m, n int) string {
+	return fmt.Sprintf("%s_%d_of_%d", base, m+1, n)
+}
+
+// ConsumerShards gets the ConsumerShard for each of a ParallelConsumer or ParallelAckConsumer
+// Each shard is configured to filter events such that each event is processed by one and only
+// one shard of the returned n shards.
+// You only need to call ConsumerShards if you're planning to use different consume functions for
+// each shard. For most cases you can use ParallelSpecs.
+func ConsumerShards(name string, n int, opts ...ParallelOption) []ConsumerShard {
+	conf := getParallelConfig(opts)
+	ret := make([]ConsumerShard, 0, n)
+	for m := 0; m < n; m++ {
+		pc := ConsumerShard{
+			Name:   conf.fmtName(name, m, n),
+			filter: filterOnHash(m, n, conf.hashFn),
+		}
+		ret = append(ret, pc)
+	}
+	return ret
+}
+
+// ParallelConsumer constructs a reflex.Consumer from a ConsumerShard.
+// This pattern is used when you need to customise the consume function for each shard.
+// This reflex.Consumer can be used in reflex.NewSpec to make it runnable.
+func ParallelConsumer(
+	shard ConsumerShard,
+	consume func(context.Context, fate.Fate, *reflex.Event) error,
+	opts ...reflex.ConsumerOption,
+) reflex.Consumer {
+	filteredConsume := func(ctx context.Context, fate fate.Fate, event *reflex.Event) error {
+		mine, err := shard.filter(event)
+		if err != nil || !mine {
+			return err
+		}
+		return consume(ctx, fate, event)
+	}
+	return reflex.NewConsumer(shard.Name, filteredConsume, opts...)
+}
+
+// ParallelAckConsumer constructs a AckConsumer from a ConsumerShard.
+// This AckConsumer can be used in NewAckSpec to make it runnable.
+func ParallelAckConsumer(
+	shard ConsumerShard,
+	store reflex.CursorStore,
+	consume func(context.Context, fate.Fate, *AckEvent) error,
+	opts ...reflex.ConsumerOption,
+) reflex.Consumer {
+	filteredConsume := func(ctx context.Context, fate fate.Fate, event *AckEvent) error {
+		mine, err := shard.filter(&event.Event)
+		if err != nil || !mine {
+			return err
+		}
+		return consume(ctx, fate, event)
+	}
+	return NewAckConsumer(shard.Name, store, filteredConsume, opts...)
+}
+
+// ParallelSpecs will create n reflex.Spec structs, one for each shard.
+// stream and store are re-used for each spec.
+// This pattern is used when consume is the same function for each shard.
+// See ParallelOption for more details on passing through reflex.ConsumerOption or reflex.StreamOption
+func ParallelSpecs(name string, n int,
+	stream reflex.StreamFunc, store reflex.CursorStore,
+	consume func(context.Context, fate.Fate, *reflex.Event) error,
+	opts ...ParallelOption,
+) []reflex.Spec {
+	var specs []reflex.Spec
+	conf := getParallelConfig(opts)
+	for _, shard := range ConsumerShards(name, n, opts...) {
+		specs = append(specs,
+			reflex.NewSpec(stream, store,
+				ParallelConsumer(shard, consume, conf.consumerOpts...),
+				conf.streamOpts...,
+			),
+		)
+	}
+	return specs
+}
 
 // Parallel starts N consumers which consume the stream in parallel. Each event
 // is consistently hashed to a consumer using the field specified in HashOption.
@@ -54,15 +179,7 @@ type getAckConsumerFn = func(m int) AckConsumer
 func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.StreamFunc,
 	cstore reflex.CursorStore, opts ...ParallelOption) {
 
-	conf := parallelConfig{
-		n:    n,
-		hash: HashOptionEventID,
-	}
-
-	for _, o := range opts {
-		o(&conf)
-	}
-
+	conf := getParallelConfig(opts)
 	for m := 0; m < n; m++ {
 		m := m
 		consumerM := makeConsumer(conf, m, n, getConsumer(m))
@@ -83,16 +200,7 @@ func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.S
 // NOTE: N should preferably be a power of 2, and modifying N will reset the
 // cursors.
 func ParallelAck(getCtx getCtxFn, getConsumer getAckConsumerFn, n int, stream reflex.StreamFunc, opts ...ParallelOption) {
-
-	conf := parallelConfig{
-		n:    n,
-		hash: HashOptionEventID,
-	}
-
-	for _, o := range opts {
-		o(&conf)
-	}
-
+	conf := getParallelConfig(opts)
 	for m := 0; m < n; m++ {
 		m := m
 		consumerM := makeAckConsumer(conf, m, n, getConsumer(m))
@@ -108,10 +216,10 @@ func ParallelAck(getCtx getCtxFn, getConsumer getAckConsumerFn, n int, stream re
 // makeConsumer returns consumer m-of-n that will only process events
 // that hash to it.
 func makeConsumer(conf parallelConfig, m, n int, inner reflex.Consumer) reflex.Consumer {
-	checkShard := makeShardCheckingFunc(conf, n)
+	filter := filterOnHash(m, n, conf.hashFn)
 
 	f := func(ctx context.Context, fate fate.Fate, event *reflex.Event) error {
-		if isInShard, err := checkShard(m, event); !isInShard || err != nil {
+		if isInShard, err := filter(event); !isInShard || err != nil {
 			return err
 		}
 		return inner.Consume(ctx, fate, event)
@@ -120,50 +228,13 @@ func makeConsumer(conf parallelConfig, m, n int, inner reflex.Consumer) reflex.C
 	return simpleConsumer{name: inner.Name(), consumeFn: f}
 }
 
-func makeShardCheckingFunc(conf parallelConfig, shardCount int) func(currentShard int, event *reflex.Event) (bool, error) {
-	hasher := fnv.New32()
-
-	return func(currentShard int, event *reflex.Event) (bool, error) {
-		var hashKey []byte
-
-		switch conf.hash {
-		case HashOptionEventType:
-			hashKey = []byte(strconv.Itoa(int(event.Type.ReflexType())))
-
-		case HashOptionEventForeignID:
-			hashKey = []byte(event.ForeignID)
-
-		case HashOptionCustomHashFn:
-			var err error
-			hashKey, err = conf.hashFn(event)
-			if err != nil {
-				return false, err
-			}
-
-		case HashOptionEventID:
-			fallthrough
-
-		default:
-			hashKey = []byte(event.ID)
-		}
-
-		hasher.Reset()
-		_, err := hasher.Write(hashKey)
-		if err != nil {
-			return false, err
-		}
-
-		return hasher.Sum32()%uint32(shardCount) == uint32(currentShard), nil
-	}
-}
-
 // makeAckConsumer returns consumer m-of-n that will only process events
 // that hash to it. Events must be acked manually.
 func makeAckConsumer(conf parallelConfig, m, n int, inner AckConsumer) *AckConsumer {
-	checkShard := makeShardCheckingFunc(conf, n)
+	filter := filterOnHash(m, n, conf.hashFn)
 
 	f := func(ctx context.Context, fate fate.Fate, event *AckEvent) error {
-		if isInShard, err := checkShard(m, &event.Event); !isInShard || err != nil {
+		if isInShard, err := filter(&event.Event); !isInShard || err != nil {
 			return err
 		}
 		return inner.Consume(ctx, fate, &event.Event)
@@ -185,22 +256,62 @@ func (s simpleConsumer) Consume(ctx context.Context, f fate.Fate, event *reflex.
 	return s.consumeFn(ctx, f, event)
 }
 
+// WithStreamOpts passes stream options in to the reflex.Spec
 func WithStreamOpts(opts ...reflex.StreamOption) ParallelOption {
 	return func(pc *parallelConfig) {
 		pc.streamOpts = append(pc.streamOpts, opts...)
 	}
 }
 
-func WithHashOption(opt HashOption) ParallelOption {
+// WithConsumerOpts passes consumer options in to reflex.NewConsumer
+func WithConsumerOpts(opts ...reflex.ConsumerOption) ParallelOption {
 	return func(pc *parallelConfig) {
-		pc.hash = opt
+		pc.consumerOpts = append(pc.consumerOpts, opts...)
 	}
 }
 
-// WithHashFn specifies the custom hash function that will be used to distribute work to parallel
-// consumers when HashOptionCustomHashFn is specified.
+func keyByEventType(event *reflex.Event) ([]byte, error) {
+	return []byte(strconv.Itoa(event.Type.ReflexType())), nil
+}
+
+func keyByForeignID(event *reflex.Event) ([]byte, error) {
+	return []byte(event.ForeignID), nil
+}
+
+func keyByEventID(event *reflex.Event) ([]byte, error) {
+	return []byte(event.ID), nil
+}
+
+// WithHashOption allows you to use one of the HashOption values to determine how events are distributed
+func WithHashOption(opt HashOption) ParallelOption {
+	return func(pc *parallelConfig) {
+		switch opt {
+		case HashOptionCustomHashFn:
+			return
+		case HashOptionEventType:
+			pc.hashFn = keyByEventType
+		case HashOptionEventForeignID:
+			pc.hashFn = keyByForeignID
+		case HashOptionEventID:
+			pc.hashFn = keyByEventID
+		}
+	}
+}
+
+// WithHashFn specifies the custom hash function that will be used to distribute work to parallel consumers.
 func WithHashFn(fn func(event *reflex.Event) ([]byte, error)) ParallelOption {
 	return func(pc *parallelConfig) {
-		pc.hashFn = fn
+		if fn != nil {
+			pc.hashFn = fn
+		}
+	}
+}
+
+// WithNameFormatter determines how each consumer name will be constructed.
+// The default name formatter takes the base string and adds "_m_of_n" to the end.
+// e.g. "test" becomes "test_3_of_8"
+func WithNameFormatter(fn func(base string, m, n int) string) ParallelOption {
+	return func(pc *parallelConfig) {
+		pc.fmtName = fn
 	}
 }
