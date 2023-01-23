@@ -64,6 +64,8 @@ func Run(in context.Context, s Spec) error {
 		defer s.Stop()
 	}
 
+	f := fate.New()
+
 	for {
 		e, err := sc.Recv()
 		if err != nil {
@@ -86,7 +88,7 @@ func Run(in context.Context, s Spec) error {
 			}
 		}
 
-		if err := s.consumer.Consume(ctx, fate.New(), e); err != nil {
+		if err := s.consumer.Consume(ctx, f, e); err != nil {
 			return errors.Wrap(err, "consume error", j.MKS{
 				"event_id":  e.ID,
 				"event_fid": e.ForeignID,
