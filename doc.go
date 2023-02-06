@@ -5,10 +5,11 @@
 // that these events do not contain any data, but are merely pointers.
 //
 // Reflex events are pointers to state changes of mutable data.
-//    event_id string        // unique id of the event
-//    type enum              // state change type
-//    foreign_id string      // id of the mutable datum
-//    timestamp timestamp    // timestamp of the event
+//
+//	event_id string        // unique id of the event
+//	type enum              // state change type
+//	foreign_id string      // id of the mutable datum
+//	timestamp timestamp    // timestamp of the event
 //
 // Events are inserted as part of sql transactions that modify the data. This
 // ensures strong data consistency; exactly one event per state change.
@@ -34,11 +35,12 @@
 // The canonical pattern is to define one cursor table per service.
 //
 // There are two ways to consume event streams:
-//   1. EventTable + CursorsTable: The consumer logic has local access to both
-//   the events and consumers tables. Ex. User service sends an email on UserCreated.
 //
-//   2. gRPC stream + CursorsTable: The consumer logic has access to a local
-//   CursorsTable, but requests the event stream from a remote service via gRPC.
-//   Ex. The Fraud service consumes PaymentCreated events from the payments
-//   service. It has its own DB and CursorsTable.
+//  1. EventTable + CursorsTable: The consumer logic has local access to both
+//     the events and consumers tables. Ex. User service sends an email on UserCreated.
+//
+//  2. gRPC stream + CursorsTable: The consumer logic has access to a local
+//     CursorsTable, but requests the event stream from a remote service via gRPC.
+//     Ex. The Fraud service consumes PaymentCreated events from the payments
+//     service. It has its own DB and CursorsTable.
 package reflex

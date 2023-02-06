@@ -14,6 +14,7 @@ import (
 	"github.com/luno/reflex"
 )
 
+// CursorType is either int or string
 type CursorType int
 
 // Cast returns cursor casted to type.
@@ -72,6 +73,7 @@ func NewCursorsTable(name string, options ...CursorsOption) CursorsTable {
 	return table
 }
 
+// CursorsOption are the configurations for the cursor table
 type CursorsOption func(*ctable)
 
 // WithCursorCursorField provides an option to configure the cursor field.
@@ -127,6 +129,7 @@ func WithCursorStrings() CursorsOption {
 	}
 }
 
+// WithTestCursorSleep replaces the sleep function for testing.
 func WithTestCursorSleep(_ testing.TB, f func(time.Duration)) CursorsOption {
 	return func(table *ctable) {
 		table.sleep = f

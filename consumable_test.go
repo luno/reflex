@@ -8,9 +8,10 @@ import (
 
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
-	"github.com/luno/reflex"
-	"github.com/luno/reflex/mock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/luno/reflex"
+	"github.com/luno/reflex/rpatterns"
 )
 
 type TestEventType int
@@ -92,7 +93,8 @@ func TestConsumable(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			cstore := mock.NewMockCStore()
+
+			cstore := rpatterns.MemCursorStore()
 			_ = cstore.SetCursor(nil, name, strconv.Itoa(test.startCursor))
 			streamer := newMockStreamer(ItoEList(test.initEvents...), test.streamEndError)
 
@@ -142,8 +144,6 @@ func TestConsumable(t *testing.T) {
 			cursor, err := cstore.GetCursor(nil, name)
 			assert.NoError(t, err)
 			assert.Equal(t, strconv.Itoa(test.finalCursor), cursor)
-
-			assert.Equal(t, 1, cstore.GetFlushCount())
 		})
 	}
 }

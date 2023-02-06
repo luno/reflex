@@ -37,6 +37,7 @@ type GapSequence struct {
 	doing, done *minHeap
 }
 
+// NewGapSequence creates a new, empty GapSequence
 func NewGapSequence() *GapSequence {
 	return &GapSequence{
 		doing: new(minHeap),
@@ -60,6 +61,7 @@ func (s *GapSequence) Done(val int64) {
 	}
 }
 
+// CurrentMax is the largest `val` (max) that has been Done where all `val`s in Doing are greater than max.
 func (s GapSequence) CurrentMax() int64 {
 	return s.max
 }

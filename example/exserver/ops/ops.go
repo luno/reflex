@@ -6,11 +6,13 @@ import (
 	"log"
 
 	"github.com/luno/fate"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/example/exserver"
 	"github.com/luno/reflex/example/exserver/db"
 )
 
+// ConsumeLocalStreamForever connects to the local server and prints out each event
 func ConsumeLocalStreamForever(dbc *sql.DB) {
 	f := func(ctx context.Context, fate fate.Fate, event *exserver.ExEvent) error {
 

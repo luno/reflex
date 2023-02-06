@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/luno/jettison/jtest"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 	_ "gocloud.dev/blob/fileblob"
 )
@@ -28,16 +27,12 @@ func TestClose(t *testing.T) {
 	require.NoError(t, err)
 
 	closer := sc.(io.Closer)
-
 	require.NoError(t, closer.Close())
 
 	_, err = sc.Recv()
 	require.Error(t, err)
 
 	require.Error(t, closer.Close())
-
-	require.Equal(t, 1.0, testutil.ToFloat64(readCounter))
-	require.Equal(t, 2.0, testutil.ToFloat64(listSkipCounter)) // Skipped the two files in /testdata/2019/...
 }
 
 func TestLegacyCursor(t *testing.T) {

@@ -5,156 +5,164 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"log"
+	"math/rand"
 	"os"
 	"testing"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/luno/jettison/jtest"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/luno/reflex/rsql"
 )
 
 var (
-	db_test_uri = flag.String("db_test_uri", getDefaultURI(), "Test database uri")
-
-	eventsIDField            = "id"
-	eventsTimeField          = "timestamp"
-	eventsTypeField          = "type"
-	eventsForeignIDField     = "foreign_id"
-	eventsMetadataField      = ""
-	cursorsCursorField       = "last_event_id"
-	cursorsCursorType        = "bigint"
-	cursorsIDField           = "id"
-	cursorsTimeField         = "updated_at"
-	isEventForeignIDInt      = false
-	eventForeignIDFieldTypes = map[bool]string{
-		false: "varchar(255)",
-		true:  "bigint",
-	}
+	dbTestURI = flag.String("db_test_uri", getDefaultURI(), "Test database uri")
 )
 
-const cursorsTable = "cursors"
+const (
+	eventsTable  = "events"
+	cursorsTable = "cursors"
+)
 
-const eventsSchema = `
-create %s table %s (
-  %s bigint not null auto_increment,
-  %s %s not null,
-  %s datetime not null,
-  %s int not null,
+type EventTableSchema struct {
+	Name      string
+	Temporary bool
 
-  %s
+	IDField   string
+	TimeField string
+	TypeField string
 
-  primary key (%s)
-);`
+	ForeignIDField string
+	IsForeignIDInt bool
 
-const eventMetadata = "%s blob null,"
+	MetadataField string
+}
 
-const cursorsSchema = `
-create %s table %s (
+func (s EventTableSchema) CreateTable(t *testing.T, dbc *sql.DB) {
+	tt := ""
+	if s.Temporary {
+		tt = "temporary"
+	}
+	fidType := "varchar(255)"
+	if s.IsForeignIDInt {
+		fidType = "bigint"
+	}
+	metadata := ""
+	if s.MetadataField != "" {
+		metadata = s.MetadataField + " blob null,"
+	}
+
+	schema := fmt.Sprintf(`create %s table %s (
+	%s bigint not null auto_increment,
+	%s %s not null,
+	%s datetime not null,
+	%s int not null,
+
+	%s
+
+	primary key (%s)
+);`,
+		tt, s.Name,
+		s.IDField,
+		s.ForeignIDField, fidType,
+		s.TimeField,
+		s.TypeField,
+		metadata,
+		s.IDField,
+	)
+	_, err := dbc.Exec(schema)
+	jtest.RequireNil(t, err)
+}
+
+type CursorTableSchema struct {
+	Name      string
+	Temporary bool
+
+	CursorField string
+	CursorType  string
+	IDField     string
+	TimeField   string
+}
+
+func (s CursorTableSchema) CreateTable(t *testing.T, dbc *sql.DB) {
+	tt := ""
+	if s.Temporary {
+		tt = "temporary"
+	}
+	schema := fmt.Sprintf(`create %s table %s (
   %s varchar(255) not null,
   %s %s not null,
   %s datetime not null,
 
   primary key (%s)
-);
-`
+);`,
+		tt, s.Name,
+		s.IDField,
+		s.CursorField, s.CursorType,
+		s.TimeField,
+		s.IDField,
+	)
+	_, err := dbc.Exec(schema)
+	jtest.RequireNil(t, err)
+}
 
-const drop = "drop table if exists %s;"
-
-// ConnectAndCloseTestDB returns a db connection with actual DB tables (not temporary)
-// that support multiple connection, but that must be closed.
-func ConnectAndCloseTestDB(t *testing.T, eventsTable, cursorTable string) (*sql.DB, func()) {
-	dbc, err := connect(10)
-	require.NoError(t, err)
-
-	maybeDrop := func() {
-		if eventsTable != "" {
-			_, err := dbc.Exec(fmt.Sprintf(drop, eventsTable))
-			require.NoError(t, err)
-		}
-		if cursorTable != "" {
-			_, err := dbc.Exec(fmt.Sprintf(drop, cursorTable))
-			require.NoError(t, err)
-		}
-	}
-
-	maybeDrop()
-	createEventsTable(t, dbc, eventsTable, false)
-	createCursorsTable(t, dbc, cursorTable, false)
-
-	return dbc, func() {
-		maybeDrop()
-		require.NoError(t, dbc.Close())
+func DefaultEventTable() EventTableSchema {
+	return EventTableSchema{
+		Name:           eventsTable,
+		IDField:        "id",
+		TimeField:      "timestamp",
+		TypeField:      "type",
+		ForeignIDField: "foreign_id",
 	}
 }
 
-func ConnectTestDB(t *testing.T, eventsTable, cursorTable string) *sql.DB {
-	dbc, err := connect(1)
-	if err != nil {
-		log.Fatalf("error connecting to db: %v", err)
+func DefaultCursorTable() CursorTableSchema {
+	return CursorTableSchema{
+		Name:        cursorsTable,
+		CursorField: "last_event_id",
+		CursorType:  "bigint",
+		IDField:     "id",
+		TimeField:   "updated_at",
 	}
-
-	createEventsTable(t, dbc, eventsTable, true)
-	createCursorsTable(t, dbc, cursorTable, true)
-	return dbc
 }
 
-func createEventsTable(t *testing.T, dbc *sql.DB, name string, temp bool) {
-	if name == "" {
-		return
-	}
+// ConnectTestDB returns a db connection with non-temporary DB tables that support multiple connections.
+func ConnectTestDB(t *testing.T, ev EventTableSchema, cursor CursorTableSchema) *sql.DB {
+	admin, err := sql.Open("mysql", *dbTestURI)
+	jtest.RequireNil(t, err)
 
-	tt := "temporary"
-	if !temp {
-		tt = ""
-	}
+	dbName := fmt.Sprintf("test_%d", rand.Int())
+	_, err = admin.ExecContext(context.Background(), "create database "+dbName)
+	jtest.RequireNil(t, err)
 
-	metaSchema := ""
-	if eventsMetadataField != "" {
-		metaSchema = fmt.Sprintf(eventMetadata, eventsMetadataField)
-	}
+	t.Log("created database: " + dbName)
 
-	q := fmt.Sprintf(eventsSchema, tt, name, eventsIDField, eventsForeignIDField,
-		eventForeignIDFieldTypes[isEventForeignIDInt], eventsTimeField,
-		eventsTypeField, metaSchema, eventsIDField)
+	t.Cleanup(func() {
+		_, err := admin.ExecContext(context.Background(), "drop database "+dbName)
+		jtest.RequireNil(t, err)
+		err = admin.Close()
+		jtest.RequireNil(t, err)
+	})
 
-	_, err := dbc.Exec(q)
-	require.NoError(t, err)
-}
-
-func createCursorsTable(t *testing.T, dbc *sql.DB, name string, temp bool) {
-	if name == "" {
-		return
-	}
-
-	tt := "temporary"
-	if !temp {
-		tt = ""
-	}
-
-	q := fmt.Sprintf(cursorsSchema, tt, name, cursorsIDField,
-		cursorsCursorField, cursorsCursorType, cursorsTimeField, cursorsIDField)
-	_, err := dbc.Exec(q)
-	require.NoError(t, err)
-}
-
-func connect(n int) (*sql.DB, error) {
-	str := *db_test_uri + "parseTime=true&collation=utf8mb4_general_ci"
+	str := *dbTestURI + dbName + "?parseTime=true&collation=utf8mb4_general_ci"
 	dbc, err := sql.Open("mysql", str)
-	if err != nil {
-		return nil, err
-	}
+	jtest.RequireNil(t, err)
 
-	dbc.SetMaxOpenConns(n)
+	t.Cleanup(func() {
+		err := dbc.Close()
+		jtest.RequireNil(t, err)
+	})
 
-	if _, err := dbc.Exec("set time_zone='+00:00';"); err != nil {
-		log.Fatalf("error setting db time_zone: %v", err)
-	}
+	ev.CreateTable(t, dbc)
+	cursor.CreateTable(t, dbc)
 
-	return dbc, nil
+	dbc.SetMaxOpenConns(10)
+	_, err = dbc.Exec("set time_zone='+00:00';")
+	jtest.RequireNil(t, err)
+
+	return dbc
 }
 
 func getDefaultURI() string {
@@ -163,7 +171,7 @@ func getDefaultURI() string {
 		return uri
 	}
 
-	return "root@unix(" + getSocketFile() + ")/test?"
+	return "root@unix(" + getSocketFile() + ")/"
 }
 
 func getSocketFile() string {
@@ -176,19 +184,17 @@ func getSocketFile() string {
 }
 
 func TestGetNextEventNoRows(t *testing.T) {
-	dbc := ConnectTestDB(t, eventsTable, "")
-	defer dbc.Close()
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
 	table := rsql.NewEventsTable(eventsTable)
 
-	el, err := rsql.GetNextEventsForTesting(t, context.TODO(), dbc, table, 0, 0)
+	el, err := rsql.GetNextEventsForTesting(context.TODO(), t, dbc, table, 0, 0)
 	assert.NoError(t, err)
 	assert.Len(t, el, 0)
 }
 
 func TestStreamRecv(t *testing.T) {
-	dbc := ConnectTestDB(t, "events", "")
-	defer dbc.Close()
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
 	table := rsql.NewEventsTable("events")
 
@@ -212,10 +218,9 @@ func TestStreamRecv(t *testing.T) {
 }
 
 func TestGetLatestID(t *testing.T) {
-	dbc := ConnectTestDB(t, "events", "")
-	defer dbc.Close()
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
-	id, err := rsql.GetLatestIDForTesting(t, context.Background(), dbc, "events", "id")
+	id, err := rsql.GetLatestIDForTesting(context.Background(), t, dbc, "events", "id")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), id)
 
@@ -225,19 +230,17 @@ func TestGetLatestID(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	id, err = rsql.GetLatestIDForTesting(t, context.Background(), dbc, "events", "id")
+	id, err = rsql.GetLatestIDForTesting(context.Background(), t, dbc, "events", "id")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(n), id)
 }
 
 func TestCursorTableInt(t *testing.T) {
 	const id = "test"
-	const name = "cursors"
 
-	dbc := ConnectTestDB(t, "", name)
-	defer dbc.Close()
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
-	ctable := rsql.NewCursorsTable(name, rsql.WithCursorAsyncDisabled())
+	ctable := rsql.NewCursorsTable(cursorsTable, rsql.WithCursorAsyncDisabled())
 
 	// Initial get is empty ("")
 	c, err := ctable.GetCursor(context.Background(), dbc, id)
@@ -270,18 +273,13 @@ func TestCursorTableInt(t *testing.T) {
 }
 
 func TestCursorTableString(t *testing.T) {
-	cache := cursorsCursorType
-	defer func() {
-		cursorsCursorType = cache
-	}()
-	cursorsCursorType = "varchar(255)"
+	cursors := DefaultCursorTable()
+	cursors.CursorType = "varchar(255)"
 
 	const id = "test"
-	const name = "cursors"
-	dbc := ConnectTestDB(t, "", name)
-	defer dbc.Close()
+	dbc := ConnectTestDB(t, DefaultEventTable(), cursors)
 
-	ctable := rsql.NewCursorsTable(name,
+	ctable := rsql.NewCursorsTable(cursorsTable,
 		rsql.WithCursorAsyncDisabled(), rsql.WithCursorStrings())
 
 	// Initial get is empty ("")
@@ -311,18 +309,12 @@ func TestCursorTableString(t *testing.T) {
 }
 
 func TestCursorTableStringWithInts(t *testing.T) {
-	cache := cursorsCursorType
-	defer func() {
-		cursorsCursorType = cache
-	}()
-	cursorsCursorType = "varchar(255)"
-
 	const id = "test"
-	const name = "cursors"
-	dbc := ConnectTestDB(t, "", name)
-	defer dbc.Close()
+	cursors := DefaultCursorTable()
+	cursors.CursorType = "varchar(255)"
+	dbc := ConnectTestDB(t, DefaultEventTable(), cursors)
 
-	ctable := rsql.NewCursorsTable(name,
+	ctable := rsql.NewCursorsTable(cursorsTable,
 		rsql.WithCursorAsyncDisabled())
 
 	// Initial get is empty ("")
@@ -352,12 +344,9 @@ func TestCursorTableStringWithInts(t *testing.T) {
 }
 
 func TestSetCursorBack(t *testing.T) {
-	const name = "cursors"
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
-	dbc := ConnectTestDB(t, "", name)
-	defer dbc.Close()
-
-	ctable := rsql.NewCursorsTable(name, rsql.WithCursorAsyncDisabled())
+	ctable := rsql.NewCursorsTable(cursorsTable, rsql.WithCursorAsyncDisabled())
 
 	err := ctable.SetCursor(context.Background(), dbc, "someID", "20")
 	assert.NoError(t, err)

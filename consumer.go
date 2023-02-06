@@ -27,6 +27,7 @@ type consumer struct {
 	activityKey   string
 }
 
+// ConsumerOption will change the behaviour of the consumer
 type ConsumerOption func(*consumer)
 
 // WithConsumerLagAlert provides an option to set the consumer lag alert

@@ -65,7 +65,7 @@ func TestParallelConsumerFilterOnEventID(t *testing.T) {
 	for evID := 1; evID <= 1000; evID++ {
 		ev := &reflex.Event{ID: strconv.Itoa(evID)}
 		c := findShardForEvent(t, ev, consumers)
-		hits[c.Name] += 1
+		hits[c.Name]++
 	}
 	assert.Len(t, hits, 10)
 

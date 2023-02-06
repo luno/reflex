@@ -51,13 +51,11 @@ func TestNewCursorsTable(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			name := test.name + "_cursors"
-			dbc := ConnectTestDB(t, "", name)
-			defer dbc.Close()
+			dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
 			var sets int
 
-			table := rsql.NewCursorsTable(name,
+			table := rsql.NewCursorsTable(cursorsTable,
 				rsql.WithCursorAsyncDisabled(),
 				rsql.WithCursorSetCounter(func() { sets++ }),
 			)
@@ -89,13 +87,12 @@ func TestNewCursorsTable(t *testing.T) {
 }
 
 func TestAsyncSetCursor(t *testing.T) {
-	dbc := ConnectTestDB(t, "", "cursors")
-	defer dbc.Close()
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
 	s := newTestSleep()
 
 	ct := rsql.NewCursorsTable(
-		"cursors",
+		cursorsTable,
 		rsql.WithTestCursorSleep(t, s.Block),
 	)
 
@@ -123,14 +120,13 @@ func TestAsyncSetCursor(t *testing.T) {
 }
 
 func TestSyncSetCursor(t *testing.T) {
-	dbc := ConnectTestDB(t, "", "cursors")
-	defer dbc.Close()
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
-	s := new(testSleep)
+	s := newTestSleep()
 
 	//Clone table and disable async writes.
 	ct := rsql.NewCursorsTable(
-		"cursors",
+		cursorsTable,
 		rsql.WithCursorAsyncDisabled(),
 		rsql.WithTestCursorSleep(t, s.Block),
 	)
@@ -146,12 +142,11 @@ func TestSyncSetCursor(t *testing.T) {
 }
 
 func TestCloneAsyncCursor(t *testing.T) {
-	dbc := ConnectTestDB(t, "", "cursors")
-	defer dbc.Close()
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
 	s := newTestSleep()
 
-	ct := rsql.NewCursorsTable("cursors").Clone(rsql.WithTestCursorSleep(t, s.Block))
+	ct := rsql.NewCursorsTable(cursorsTable).Clone(rsql.WithTestCursorSleep(t, s.Block))
 
 	err := ct.SetCursor(context.Background(), dbc, "test", "10")
 	require.NoError(t, err)
@@ -167,60 +162,44 @@ func TestCloneAsyncCursor(t *testing.T) {
 func newTestSleep() *testSleep {
 	return &testSleep{
 		block: true,
+		cond:  sync.NewCond(new(sync.Mutex)),
 	}
 }
 
 type testSleep struct {
 	count int
+	cond  *sync.Cond
 	block bool
-	mu    sync.Mutex
 }
 
 func (s *testSleep) UnblockOnce() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+	defer s.cond.Broadcast()
 	s.block = false
 }
 
-func (s *testSleep) isBlocked() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.block
-}
-
-func (s *testSleep) Count() interface{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *testSleep) Count() any {
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
 	return s.count
 }
 
 func (s *testSleep) Block(_ time.Duration) {
-	s.mu.Lock()
-	s.count++
-	s.mu.Unlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
 
-	for s.isBlocked() {
-		time.Sleep(time.Nanosecond) // don't spin
+	s.count++
+	for s.block {
+		s.cond.Wait()
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.block = true
 }
 
-func waitForResult(t *testing.T, expect interface{}, f func() interface{}) {
+func waitForResult(t *testing.T, expect any, f func() any) {
 	t.Helper()
-	t0 := time.Now()
-
-	for {
-		last := f()
-		if last == expect {
-			return
-		}
-		if time.Now().Sub(t0) > time.Second*2 {
-			require.Fail(t, "Timeout waiting for result", "last=%v", last)
-			return
-		}
-		time.Sleep(time.Millisecond) // don't spin
-	}
+	require.Eventually(t, func() bool {
+		return f() == expect
+	}, 2*time.Second, time.Millisecond)
 }

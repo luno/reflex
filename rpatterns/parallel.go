@@ -55,21 +55,27 @@ func getParallelConfig(opts []ParallelOption) parallelConfig {
 	return c
 }
 
+// ParallelOption configures the consumer with different behaviour
 type ParallelOption func(pc *parallelConfig)
 type getCtxFn = func(m int) context.Context
 type getConsumerFn = func(m int) reflex.Consumer
 type getAckConsumerFn = func(m int) AckConsumer
 
+// ConsumerShard is one of n consumers, with a formatted name and a unique EventFilter
 type ConsumerShard struct {
 	Name   string
 	filter EventFilter
 }
 
+// GetFilter gets the filter for this shard
 func (s ConsumerShard) GetFilter() EventFilter {
 	return s.filter
 }
 
 type eventKeyFn func(event *reflex.Event) ([]byte, error)
+
+// EventFilter takes a reflex.Event and returns true if it should be allowed to be processed or
+// false if it shouldn't. It can error if it fails to determine if the event should be processed.
 type EventFilter func(event *reflex.Event) (bool, error)
 
 func filterOnHash(m, n int, keyFn eventKeyFn) EventFilter {

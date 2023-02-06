@@ -66,7 +66,7 @@ func (c *readThroughCursorStore) GetCursor(ctx context.Context, consumerName str
 // Use cases:
 //   - Testing
 //   - Programmatic seeding of a cursor: See ReadThroughCursorStore above.
-func MemCursorStore(opts ...memOpt) reflex.CursorStore {
+func MemCursorStore(opts ...MemOpt) reflex.CursorStore {
 	res := &memCursorStore{cursors: make(map[string]string)}
 	for _, opt := range opts {
 		opt(res)
@@ -92,11 +92,12 @@ func (m *memCursorStore) SetCursor(_ context.Context, consumerName string, curso
 
 func (m *memCursorStore) Flush(_ context.Context) error { return nil }
 
-type memOpt func(*memCursorStore)
+// MemOpt are options for the MemCursorStore
+type MemOpt func(*memCursorStore)
 
-// WithMemCursor returns a option that stores the cursor in the
+// WithMemCursor returns an option that stores the cursor in the
 // MemCursorStore.
-func WithMemCursor(name, cursor string) memOpt {
+func WithMemCursor(name, cursor string) MemOpt {
 	return func(m *memCursorStore) {
 		_ = m.SetCursor(nil, name, cursor)
 	}
@@ -104,7 +105,7 @@ func WithMemCursor(name, cursor string) memOpt {
 
 // WithMemCursorInt returns a option that stores the int cursor in the
 // MemCursorStore.
-func WithMemCursorInt(name string, cursor int64) memOpt {
+func WithMemCursorInt(name string, cursor int64) MemOpt {
 	return func(m *memCursorStore) {
 		_ = m.SetCursor(nil, name, strconv.FormatInt(cursor, 10))
 	}

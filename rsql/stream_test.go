@@ -13,15 +13,12 @@ import (
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/jtest"
 	"github.com/luno/jettison/log"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/grpctest"
 	"github.com/luno/reflex/rsql"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
-
-const (
-	eventsTable = "events"
 )
 
 func TestStream(t *testing.T) {
@@ -55,7 +52,7 @@ func TestStream(t *testing.T) {
 			s := setupState(t, nil, []rsql.EventsOption{
 				rsql.WithEventsInserter(mock.Insert),
 				rsql.WithEventsLoader(mock.Load),
-			})
+			}, DefaultEventTable(), DefaultCursorTable())
 			defer s.stop()
 
 			// Skip 0 since that results in noop event.
@@ -107,7 +104,7 @@ func TestConsumeStreamClient(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			s := setupState(t, nil, nil)
+			s := setupState(t, nil, nil, DefaultEventTable(), DefaultCursorTable())
 			defer s.stop()
 
 			for _, e := range test.events {
@@ -162,7 +159,7 @@ func TestStreamClientErrors(t *testing.T) {
 	s := setupState(t, nil, []rsql.EventsOption{
 		rsql.WithEventsInserter(mock.Insert),
 		rsql.WithEventsLoader(mock.Load),
-	})
+	}, DefaultEventTable(), DefaultCursorTable())
 	defer s.stop()
 
 	// Skip 0 since it is a noop.
@@ -229,7 +226,10 @@ func TestStreamClientErrors(t *testing.T) {
 
 func TestConsumeStreamLag(t *testing.T) {
 	s := setupState(t, nil,
-		[]rsql.EventsOption{rsql.WithEventsBackoff(0)})
+		[]rsql.EventsOption{rsql.WithEventsBackoff(0)},
+		DefaultEventTable(),
+		DefaultCursorTable(),
+	)
 	defer s.stop()
 
 	total := 10
@@ -238,77 +238,52 @@ func TestConsumeStreamLag(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// push back first three event 2 mins
-	firstBatch := 3
-	for i := 0; i < firstBatch; i++ {
-		_, err := s.dbc.Exec("update "+eventsTable+" set timestamp=date_sub(timestamp, interval 120 second) where id=?", i+1)
+	// delay last three events by 10 seconds
+	for i := total - 2; i <= total; i++ {
+		_, err := s.dbc.Exec("update "+eventsTable+" set timestamp=date_add(timestamp, interval 10 second) where id=?", i)
 		assert.NoError(t, err)
 	}
 
 	errDone := errors.New("done", j.C("ERR_DONE"))
-
-	var (
-		results []*reflex.Event
-		mu      sync.Mutex
-	)
-
-	countResults := func() interface{} {
-		mu.Lock()
-		defer mu.Unlock()
-		return len(results)
-	}
-
+	feed := make(chan *reflex.Event)
 	f := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
-		mu.Lock()
-		defer mu.Unlock()
-		results = append(results, e)
-		if len(results) == total {
+		feed <- e
+		if e.IDInt() == int64(total) {
+			close(feed)
 			return errDone
 		}
 		return nil
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	spec := reflex.NewSpec(
+		s.client.StreamEvents,
+		s.ctable.ToStore(s.dbc),
+		reflex.NewConsumer("test", f),
+		reflex.WithStreamLag(2*time.Second),
+	)
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		// wait for first batch
-		waitForResult(t, firstBatch, countResults)
-
-		// push back rest of events 2 mins
-		for i := firstBatch; i < total; i++ {
-			_, err := s.dbc.ExecContext(ctx, "update "+eventsTable+" set timestamp=date_sub(timestamp, interval 120 second) where id=?", i+1)
-			assert.NoError(t, err)
-		}
-
-		// wait for rest
-		waitForResult(t, total, countResults)
-
-		time.Sleep(time.Second) // sleep and cancel (should not affect test duration)
-		cancel()
+		defer wg.Done()
+		err := reflex.Run(context.Background(), spec)
+		jtest.Require(t, errDone, err)
 	}()
 
-	consumer := reflex.NewConsumer("test", f)
-	consumable := reflex.NewConsumable(s.client.StreamEvents, s.ctable.ToStore(s.dbc),
-		reflex.WithStreamLag(time.Minute))
-	err := consumable.Consume(ctx, consumer)
-	jtest.Require(t, errDone, err)
-
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Len(t, results, total)
-	for i, e := range results {
-		ii := i + 1
-		assertEqualI2S(t, ii, e.ForeignID)
-		assert.Equal(t, ii, e.Type.ReflexType())
-		assert.Equal(t, int64(ii), e.IDInt())
+	i := 1
+	for ev := range feed {
+		diff := time.Since(ev.Timestamp)
+		assert.Greater(t, diff, 2*time.Second)
+		assert.Less(t, diff, 3*time.Second)
+		assert.Equal(t, int64(i), ev.IDInt())
+		i++
 	}
+	wg.Wait()
 }
 
 func TestStreamFromHead(t *testing.T) {
 	notifier := new(mockNotifier)
 	s := setupState(t, nil,
-		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)})
+		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)}, DefaultEventTable(), DefaultCursorTable())
 	defer s.stop()
 
 	prefill := 10
@@ -366,7 +341,7 @@ func TestStreamFromHead(t *testing.T) {
 func TestStreamToHead(t *testing.T) {
 	notifier := new(mockNotifier)
 	s := setupState(t, nil,
-		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)})
+		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)}, DefaultEventTable(), DefaultCursorTable())
 	defer s.stop()
 
 	assertCount := func(t *testing.T, after string, n, offset int) {
@@ -419,14 +394,10 @@ func TestStreamToHead(t *testing.T) {
 }
 
 func TestStreamMetadata(t *testing.T) {
-	cache := eventsMetadataField
-	defer func() {
-		eventsMetadataField = cache
-	}()
-	eventsMetadataField = "metadata"
-
+	ev := DefaultEventTable()
+	ev.MetadataField = "metadata"
 	s := setupState(t, nil,
-		[]rsql.EventsOption{rsql.WithEventMetadataField(eventsMetadataField)})
+		[]rsql.EventsOption{rsql.WithEventMetadataField(ev.MetadataField)}, ev, DefaultCursorTable())
 	defer s.stop()
 
 	prefill := 10
@@ -473,7 +444,7 @@ func TestStreamLag(t *testing.T) {
 	loader := func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 		lag time.Duration) (events []*reflex.Event, err error) {
 		loadCountCh <- struct{}{}
-		return rsql.GetNextEventsForTesting(t, ctx, dbc, table, prevCursor, lag)
+		return rsql.GetNextEventsForTesting(ctx, t, dbc, table, prevCursor, lag)
 	}
 
 	notifier := new(mockNotifier)
@@ -482,7 +453,7 @@ func TestStreamLag(t *testing.T) {
 			rsql.WithEventsLoader(loader),
 			rsql.WithEventsNotifier(notifier),
 			rsql.WithEventsBackoff(time.Hour), // Manual control on sleep.
-		})
+		}, DefaultEventTable(), DefaultCursorTable())
 	defer s.stop()
 
 	table = s.etable
@@ -549,7 +520,7 @@ func TestStreamLagNoCache(t *testing.T) {
 	loader := func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 		lag time.Duration) (events []*reflex.Event, err error) {
 		loadCountCh <- struct{}{}
-		return rsql.GetNextEventsForTesting(t, ctx, dbc, table, prevCursor, lag)
+		return rsql.GetNextEventsForTesting(ctx, t, dbc, table, prevCursor, lag)
 	}
 
 	notifier := new(mockNotifier)
@@ -559,7 +530,7 @@ func TestStreamLagNoCache(t *testing.T) {
 			rsql.WithoutEventsCache(),
 			rsql.WithEventsNotifier(notifier),
 			rsql.WithEventsBackoff(time.Hour), // Manual control on sleep.
-		})
+		}, DefaultEventTable(), DefaultCursorTable())
 	defer s.stop()
 
 	table = s.etable
@@ -619,7 +590,7 @@ func TestStreamLagNoCache(t *testing.T) {
 }
 
 func TestCancelError(t *testing.T) {
-	s := setupState(t, nil, nil)
+	s := setupState(t, nil, nil, DefaultEventTable(), DefaultCursorTable())
 	defer s.stop()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -644,9 +615,9 @@ type teststate struct {
 }
 
 func setupState(t *testing.T, streamOptions []reflex.StreamOption,
-	eventOptions []rsql.EventsOption) *teststate {
+	eventOptions []rsql.EventsOption, ev EventTableSchema, crs CursorTableSchema) *teststate {
 
-	dbc := ConnectTestDB(t, eventsTable, cursorsTable)
+	dbc := ConnectTestDB(t, ev, crs)
 	etable := rsql.NewEventsTable(eventsTable, eventOptions...)
 	ctable := rsql.NewCursorsTable(cursorsTable, rsql.WithCursorAsyncPeriod(time.Minute)) // require flush
 	srv, url := grpctest.NewServer(t, etable.ToStream(dbc, streamOptions...), ctable.ToStore(dbc))

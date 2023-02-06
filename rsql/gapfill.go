@@ -24,10 +24,11 @@ type Gap struct {
 // FillGaps registers the default gap filler with the events table. It
 // inserts noops into the events table when gaps are detected. Both
 // EventsTable and EventsTableInt satisfy the gapTable internal interface.
-//   Usage:
-//   var events = rsql.NewEventsTable()
-//   ...
-//   rsql.FillGaps(dbc, events)
+//
+//	Usage:
+//	var events = rsql.NewEventsTable()
+//	...
+//	rsql.FillGaps(dbc, events)
 func FillGaps(dbc *sql.DB, gapTable gapTable) {
 	gapTable.ListenGaps(makeFill(dbc, gapTable.getSchema()))
 }

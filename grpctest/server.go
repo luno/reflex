@@ -8,11 +8,12 @@ import (
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/interceptors"
 	"github.com/luno/jettison/log"
-	"github.com/luno/reflex"
-	"github.com/luno/reflex/reflexpb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"google.golang.org/grpc"
+
+	"github.com/luno/reflex"
+	"github.com/luno/reflex/reflexpb"
 )
 
 // NewServer starts and returns a reflex server and its address.
@@ -49,6 +50,7 @@ func NewServer(_ testing.TB, stream reflex.StreamFunc,
 
 var _ reflexpb.ReflexServer = (*Server)(nil)
 
+// Server is an gRPC streaming server for testing
 type Server struct {
 	grpcServer  *grpc.Server
 	stream      reflex.StreamFunc
@@ -57,16 +59,19 @@ type Server struct {
 	sentCounter prometheus.Counter
 }
 
+// Stream creates a new stream
 func (srv *Server) Stream(req *reflexpb.StreamRequest,
 	ss reflexpb.Reflex_StreamServer) error {
 
 	return srv.rserver.Stream(srv.stream, req, &counter{ss, srv.sentCounter})
 }
 
+// SentCount is the number of events sent
 func (srv *Server) SentCount() float64 {
 	return testutil.ToFloat64(srv.sentCounter)
 }
 
+// Stop ends any streams and stops the gRPC server
 func (srv *Server) Stop() {
 	srv.rserver.Stop()
 	srv.grpcServer.GracefulStop()

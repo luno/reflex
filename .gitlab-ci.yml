@@ -1,0 +1,30 @@
+image: golang:latest
+
+stages:
+  - test
+
+services:
+  - mysql:latest
+
+variables:
+  MYSQL_DATABASE: example
+  MYSQL_ROOT_PASSWORD: reflex
+
+lint:
+  stage: test
+  script:
+    - make vet
+
+unit_test:
+  parallel:
+    matrix:
+      - GO: ["1.18", "1.19"]
+  image:
+    name: golang:$GO
+  stage: test
+  variables:
+    DB_TEST_URI: "root:$MYSQL_ROOT_PASSWORD@tcp(mysql:3306)/"
+    DB_EXAMPLE_CLIENT_URI: "root:$MYSQL_ROOT_PASSWORD@tcp(mysql:3306)/example"
+    DB_EXAMPLE_SERVER_URI: "root:$MYSQL_ROOT_PASSWORD@tcp(mysql:3306)/example"
+  script:
+    - make test

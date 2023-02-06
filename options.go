@@ -45,6 +45,7 @@ func WithStreamLag(d time.Duration) StreamOption {
 	}
 }
 
+// ResolveOptions converts a list of options to the StreamOptions struct
 func ResolveOptions(options ...StreamOption) StreamOptions {
 	var ret StreamOptions
 	for _, opt := range options {

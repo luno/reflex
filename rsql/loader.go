@@ -23,10 +23,11 @@ type loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 // allows skipping ranges of noops events.
 //
 // Loaders are layered as follows in streamclient.Recv (from outer to inner):
-//   noopFilter         (filterLoader)
-//   rCache (if enable) (loader)
-//   gapDetector        (loader)
-//   baseLoader         (loader)
+//
+//	noopFilter         (filterLoader)
+//	rCache (if enable) (loader)
+//	gapDetector        (loader)
+//	baseLoader         (loader)
 //
 // TODO(corver): Remove lag since we now do this at destination.
 type filterLoader func(ctx context.Context, dbc *sql.DB, prevCursor int64,

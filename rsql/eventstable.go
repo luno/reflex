@@ -85,7 +85,7 @@ func WithEventForeignIDField(field string) EventsOption {
 }
 
 // WithEventMetadataField provides an option to set the event DB metadata field.
-// It is disabled by default; ie. ''.
+// It is disabled by default; ie. ”.
 func WithEventMetadataField(field string) EventsOption {
 	return func(table *EventsTable) {
 		table.schema.metadataField = field
@@ -191,12 +191,12 @@ type EventsTable struct {
 // can be optionally called to notify the table's EventNotifier of the change.
 // The intended pattern for this function is:
 //
-//       notify, err := etable.Insert(ctx, tx, ...)
-//       if err != nil {
-//         return err
-//       }
-//       defer notify()
-//       return doWorkAndCommit(tx)
+//	notify, err := etable.Insert(ctx, tx, ...)
+//	if err != nil {
+//	  return err
+//	}
+//	defer notify()
+//	return doWorkAndCommit(tx)
 func (t *EventsTable) Insert(ctx context.Context, tx *sql.Tx, foreignID string,
 	typ reflex.EventType) (NotifyFunc, error) {
 	return t.InsertWithMetadata(ctx, tx, foreignID, typ, nil)
@@ -295,9 +295,8 @@ func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema eta
 
 	if !withNoopEvents {
 		return wrapNoopFilter(loader)
-	} else {
-		return wrapFilter(loader)
 	}
+	return wrapFilter(loader)
 }
 
 // options define config/state defined in EventsTable used by the streamclients.

@@ -8,6 +8,7 @@ import (
 	"github.com/luno/reflex"
 )
 
+// NewEventsTableInt returns an event table which uses integers for the foreign IDs
 func NewEventsTableInt(name string, options ...EventsOption) *EventsTableInt {
 	return &EventsTableInt{NewEventsTable(name, options...)}
 }

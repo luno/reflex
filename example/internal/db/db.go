@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	// Import for the driver
 	_ "github.com/go-sql-driver/mysql"
 )
 
+// Connect to the db
 func Connect(uri string) (*sql.DB, error) {
 	dbc, err := sql.Open("mysql", uri)
 	if err != nil {
@@ -19,6 +21,7 @@ func Connect(uri string) (*sql.DB, error) {
 	return dbc, dbc.Ping()
 }
 
+// ConnectForTesting to the db and create a temporary schema
 func ConnectForTesting(t *testing.T, uri, schemaPath string) (*sql.DB, error) {
 	dbc, err := Connect(uri)
 	if err != nil {

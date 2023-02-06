@@ -10,11 +10,14 @@ import (
 
 const consumerLabel = "consumer_name"
 
+// Labels returns the prometheus labels for the consumer
 func Labels(name string) prometheus.Labels {
 	return prometheus.Labels{consumerLabel: name}
 }
 
 var (
+	// ConsumerLag is a metric for how far behind the consumer is
+	// based on the last consumed event
 	ConsumerLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
@@ -22,6 +25,8 @@ var (
 		Help:      "Lag between now and the current event timestamp in seconds",
 	}, []string{consumerLabel})
 
+	// ConsumerAge is a metric for how old events coming that are being
+	// processed are.
 	ConsumerAge = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
@@ -35,6 +40,7 @@ var (
 		},
 	}, []string{consumerLabel})
 
+	// ConsumerLagAlert is whether or not the consumer is too far behind
 	ConsumerLagAlert = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
@@ -42,6 +48,7 @@ var (
 		Help:      "Whether or not the consumer lag crosses its alert threshold",
 	}, []string{consumerLabel})
 
+	// ConsumerActivityGauge is whether or not the consumer has processed an event
 	ConsumerActivityGauge = newActivityGauge(
 		prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: "reflex",
@@ -51,6 +58,7 @@ var (
 				"in the activity ttl period",
 		}, []string{consumerLabel}))
 
+	// ConsumerLatency is how long the consumer is taking to process an event
 	ConsumerLatency = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",
@@ -59,6 +67,7 @@ var (
 		Buckets:   []float64{0.001, 0.01, 0.1, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0},
 	}, []string{consumerLabel})
 
+	// ConsumerErrors is the number of errors from processing events
 	ConsumerErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "reflex",
 		Subsystem: "consumer",

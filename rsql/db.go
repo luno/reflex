@@ -124,12 +124,13 @@ func getNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
 	return el, rows.Err()
 }
 
-func GetNextEventsForTesting(t *testing.T, ctx context.Context, dbc *sql.DB,
-	table *EventsTable, after int64, lag time.Duration) ([]*reflex.Event, error) {
+// GetNextEventsForTesting fetches a bunch of events from the event table
+func GetNextEventsForTesting(ctx context.Context, _ *testing.T, dbc *sql.DB, table *EventsTable, after int64, lag time.Duration) ([]*reflex.Event, error) {
 	return getNextEvents(ctx, dbc, table.schema, after, lag)
 }
 
-func GetLatestIDForTesting(t *testing.T, ctx context.Context, dbc *sql.DB, eventTable, idField string) (int64, error) {
+// GetLatestIDForTesting fetches the latest event id from the event table
+func GetLatestIDForTesting(ctx context.Context, _ *testing.T, dbc *sql.DB, eventTable, idField string) (int64, error) {
 	return getLatestID(ctx, dbc, etableSchema{name: eventTable, idField: idField})
 }
 
@@ -144,15 +145,15 @@ func isMySQLErrDupEntry(err error) bool {
 }
 
 // isMySQLErrReadOnly returns true if the error is due the DB running in read only mode.
-//  - 1290: ER_OPTION_PREVENTS_STATEMENT
+//   - 1290: ER_OPTION_PREVENTS_STATEMENT
 func isMySQLErrReadOnly(err error) bool {
 	return isMySQLErr(err, 1290)
 }
 
 // isMySQLErrNoAccess returns true if the error is due lack of permissions.
-//  - 1142: ER_TABLEACCESS_DENIED_ERROR
-//  - 1143: ER_COLUMNACCESS_DENIED_ERROR
-//  - 1370: ER_PROCACCESS_DENIED_ERROR
+//   - 1142: ER_TABLEACCESS_DENIED_ERROR
+//   - 1143: ER_COLUMNACCESS_DENIED_ERROR
+//   - 1370: ER_PROCACCESS_DENIED_ERROR
 func isMySQLErrNoAccess(err error) bool {
 	return isMySQLErr(err, 1142, 1143, 1370)
 }

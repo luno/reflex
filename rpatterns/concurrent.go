@@ -40,6 +40,7 @@ type ConcurrentConsumer struct {
 	consumeError    error
 }
 
+// NewConcurrentConsumer creates a new consumer with an inflight buffer of 100 events
 func NewConcurrentConsumer(
 	cStore reflex.CursorStore,
 	consumer reflex.Consumer,
@@ -80,6 +81,7 @@ func (c *ConcurrentConsumer) getError() error {
 	return c.consumeError
 }
 
+// Reset stops processing any current events and restarts the consumer ready to start consuming again.
 func (c *ConcurrentConsumer) Reset() error {
 	// Stop processing inflight events
 	c.stop()
@@ -103,6 +105,7 @@ func (c *ConcurrentConsumer) Reset() error {
 	return nil
 }
 
+// Consume is used by reflex to feed events into the consumer
 func (c *ConcurrentConsumer) Consume(ctx context.Context, f fate.Fate, e *reflex.Event) error {
 	// Check if a previous event errored, in which case we need to stop/reset
 	if err := c.getError(); err != nil {
@@ -153,6 +156,7 @@ func (c *ConcurrentConsumer) updateCursorForever() {
 	}
 }
 
+// NewConcurrentSpec wraps the ConcurrentConsumer in a reflex.Spec
 func NewConcurrentSpec(
 	stream reflex.StreamFunc,
 	rac *ConcurrentConsumer,

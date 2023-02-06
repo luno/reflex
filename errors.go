@@ -24,10 +24,12 @@ var (
 	deadlineProto = status.FromContextError(context.DeadlineExceeded).Proto()
 )
 
+// IsStoppedErr checks whether err is an ErrStopped
 func IsStoppedErr(err error) bool {
 	return errors.Is(err, ErrStopped)
 }
 
+// IsHeadReachedErr checks whether err is an ErrHeadReached
 func IsHeadReachedErr(err error) bool {
 	return errors.Is(err, ErrHeadReached)
 }

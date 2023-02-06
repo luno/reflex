@@ -14,15 +14,15 @@ jobs:
 
     strategy:
       matrix:
-        mysql: ['mysql:5.6', 'mysql:5.7', 'mysql:latest']
-        go: ['1', '1.12', '1.13']
+        mysql: ['mysql:5.7', 'mysql:latest']
+        go: ['1.18', '1.19']
 
     services:
       mysql:
         image: ${{ matrix.mysql }}
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: yes
-          MYSQL_DATABASE: test
+          MYSQL_DATABASE: example
         ports:
           - 3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
@@ -33,27 +33,17 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Set up Go
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go }}
         id: go
 
-      - name: Env
-        run: go env
-
-      - name: Get dependencies
-        run: |
-          go get -v -t -d ./...
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Build
-        run: go build -v .
+      - name: Lint
+        run: make vet
 
       - name: Test
-        run: go test -race ./...
+        run: make test
         env:
-          DB_TEST_URI: "root@tcp(localhost:${{ job.services.mysql.ports[3306] }})/test?"
-          DB_EXAMPLE_CLIENT_URI: "root@tcp(localhost:${{ job.services.mysql.ports[3306] }})/test?"
-          DB_EXAMPLE_SERVER_URI: "root@tcp(localhost:${{ job.services.mysql.ports[3306] }})/test?"
+          DB_TEST_URI: "root:@tcp(localhost:${{ job.services.mysql.ports[3306] }})/"
+          DB_EXAMPLE_CLIENT_URI: "root@tcp(localhost:${{ job.services.mysql.ports[3306] }})/example"
+          DB_EXAMPLE_SERVER_URI: "root@tcp(localhost:${{ job.services.mysql.ports[3306] }})/example"

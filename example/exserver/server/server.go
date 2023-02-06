@@ -6,11 +6,12 @@ import (
 	"net"
 
 	"github.com/luno/jettison/errors"
+	"google.golang.org/grpc"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/example/exserver/db"
 	pb "github.com/luno/reflex/example/exserver/exserverpb"
 	"github.com/luno/reflex/reflexpb"
-	"google.golang.org/grpc"
 )
 
 // Server is a gRPC server to serve RPC requests.
@@ -53,18 +54,22 @@ func (srv *Server) ServeForever(grpcAddress string) error {
 	return grpcServer.Serve(lis)
 }
 
+// StreamEvent1 handles stream requests
 func (srv *Server) StreamEvent1(req *reflexpb.StreamRequest, ss pb.ExServer_StreamEvent1Server) error {
 	return srv.rserver.Stream(srv.events1StreamFunc, req, ss)
 }
 
+// StreamEvent2 handles stream requests
 func (srv *Server) StreamEvent2(req *reflexpb.StreamRequest, ss pb.ExServer_StreamEvent2Server) error {
 	return srv.rserver.Stream(srv.events2StreamFunc, req, ss)
 }
 
+// Echo handles echo requests
 func (srv *Server) Echo(_ context.Context, req *pb.EchoMsg) (*pb.EchoMsg, error) {
 	return req, nil
 }
 
+// Stop stops any streaming and then stops the gRPC server
 func (srv *Server) Stop() {
 	srv.rserver.Stop()
 	srv.grpcServer.GracefulStop()

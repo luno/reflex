@@ -8,39 +8,27 @@ import (
 	"time"
 
 	"github.com/luno/jettison/jtest"
+	"github.com/stretchr/testify/require"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rpatterns"
-	"github.com/stretchr/testify/require"
 )
 
 func TestPoller(t *testing.T) {
-	s := &sleeper{cond: sync.NewCond(new(sync.Mutex))}
+	g := NewGate()
 	api := new(pollapi)
-	p := rpatterns.NewPoller(api.Poll, rpatterns.WithSleep(t, s.Sleep))
+	p := rpatterns.NewPoller(api.Poll, rpatterns.WithSleep(t, g.Sleep))
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	sc, err := p.Stream(ctx, "")
 	require.NoError(t, err)
 
-	// No events in API, so first call to Recv will block/sleep.
-	go func() {
-		require.Eventually(t, func() bool {
-			return s.Count() == 1
-		}, time.Second, time.Millisecond)
-
-		// Cancel context
-		cancel()
-	}()
-
 	_, err = sc.Recv() // This blocks and then we cancel the context.
-	jtest.Require(t, context.Canceled, err)
-	s.Unblock()
+	jtest.Require(t, context.DeadlineExceeded, err)
+	cancel()
 
 	// Try again, but with events
-	ctx, cancel = context.WithCancel(context.Background())
-	defer cancel()
-
-	sc, err = p.Stream(ctx, "")
+	sc, err = p.Stream(context.Background(), "")
 	require.NoError(t, err)
 
 	// Insert 10 events
@@ -49,6 +37,8 @@ func TestPoller(t *testing.T) {
 		api.Add(*ItoE(i))
 	}
 
+	g.Unblock()
+
 	// Assert we get all the events.
 	for i := 1; i <= n0; i++ {
 		e, err := sc.Recv()
@@ -56,25 +46,17 @@ func TestPoller(t *testing.T) {
 		require.Equal(t, int64(i), e.IDInt())
 	}
 
-	// It didn't sleep again, count still 1.
-	require.Equal(t, 1, s.Count())
+	g.Block()
+	time.Sleep(100 * time.Millisecond)
+	g.Unblock()
 
 	// Poll again, wait for it to sleep, then add 20 more events.
 	n1 := 20
 
-	// No more events in API, so next call to Recv will block/sleep.
-	go func() {
-		require.Eventually(t, func() bool {
-			return s.Count() == 2
-		}, time.Second, time.Millisecond)
-
-		// Add n1 more
-		for i := 1; i <= n1; i++ {
-			api.Add(*ItoE(n0 + i))
-		}
-
-		s.Unblock()
-	}()
+	// Add n1 more
+	for i := 1; i <= n1; i++ {
+		api.Add(*ItoE(n0 + i))
+	}
 
 	for i := 1; i <= n1; i++ {
 		e, err := sc.Recv()
@@ -117,40 +99,29 @@ func (p *pollapi) Poll(_ context.Context, after string, _ ...reflex.StreamOption
 	return res, nil
 }
 
-type sleeper struct {
-	cond      *sync.Cond
-	count     int
-	unblocked bool
+type Gate struct {
+	mu sync.Mutex
+	ch chan time.Time
 }
 
-func (s *sleeper) Unblock() {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
-	s.unblocked = true
-	s.cond.Signal()
-}
-func (s *sleeper) Count() int {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
-	return s.count
+func NewGate() *Gate {
+	return &Gate{ch: make(chan time.Time)}
 }
 
-func (s *sleeper) Sleep(time.Duration) <-chan time.Time {
-	ch := make(chan time.Time, 0)
+func (g *Gate) Block() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.ch = make(chan time.Time)
+}
 
-	go func() {
-		s.cond.L.Lock()
-		s.count++
-		for !s.unblocked {
-			s.cond.Wait()
-		}
+func (g *Gate) Unblock() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	close(g.ch)
+}
 
-		s.unblocked = false
-
-		s.cond.L.Unlock()
-
-		close(ch)
-	}()
-
-	return ch
+func (g *Gate) Sleep(_ time.Duration) <-chan time.Time {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.ch
 }

@@ -17,6 +17,7 @@ const (
 	numberOfEvents      = 3
 )
 
+// TestCursorsTable runs assertions on the cursor table to check it has a valid schema
 func TestCursorsTable(t *testing.T, dbc *sql.DB, table CursorsTable) {
 	createdLastEventID := ""
 	updatedLastEventID := "10"
@@ -33,16 +34,17 @@ func TestCursorsTable(t *testing.T, dbc *sql.DB, table CursorsTable) {
 	assert.Equal(t, updatedLastEventID, lastEventID)
 }
 
-// TestEventsTable provides a helper function to test event tables
-// with int foreign id columns.
+// TestEventsTableInt provides a helper function to test event tables with int foreign id columns.
 func TestEventsTableInt(t *testing.T, dbc *sql.DB, table *EventsTableInt) {
 	TestEventsTableWithID(t, dbc, table.EventsTable, testForeignIDInt)
 }
 
+// TestEventsTable provides a helper function to test event tables.
 func TestEventsTable(t *testing.T, dbc *sql.DB, table *EventsTable) {
 	TestEventsTableWithID(t, dbc, table, testForeignIDString)
 }
 
+// TestEventsTableWithID provides a helper function to test event tables.
 func TestEventsTableWithID(t *testing.T, dbc *sql.DB, table *EventsTable, foreignID string) {
 	tx, err := dbc.Begin()
 	require.NoError(t, err)

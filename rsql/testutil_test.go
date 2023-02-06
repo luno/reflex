@@ -7,134 +7,83 @@ import (
 )
 
 func TestTestEventsTable(t *testing.T) {
-	dbc := ConnectTestDB(t, eventsTable, "")
-	defer dbc.Close()
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 
 	rsql.TestEventsTable(t, dbc, rsql.NewEventsTable(eventsTable))
 }
 
 func TestCustomIDField(t *testing.T) {
-	cache := eventsIDField
-	defer func() {
-		eventsIDField = cache
-	}()
-
-	eventsIDField = "custom_id"
-
-	dbc := ConnectTestDB(t, eventsTable, "")
-	defer dbc.Close()
+	ev := DefaultEventTable()
+	ev.IDField = "custom_id"
+	dbc := ConnectTestDB(t, ev, DefaultCursorTable())
 
 	rsql.TestEventsTable(t, dbc, rsql.NewEventsTable(eventsTable,
-		rsql.WithEventIDField(eventsIDField)))
+		rsql.WithEventIDField(ev.IDField)))
 }
 
 func TestCustomTimeField(t *testing.T) {
-	cache := eventsTimeField
-	defer func() {
-		eventsTimeField = cache
-	}()
-
-	eventsTimeField = "custom_timestamp"
-
-	dbc := ConnectTestDB(t, eventsTable, "")
-	defer dbc.Close()
+	ev := DefaultEventTable()
+	ev.TimeField = "custom_timestamp"
+	dbc := ConnectTestDB(t, ev, DefaultCursorTable())
 
 	rsql.TestEventsTable(t, dbc, rsql.NewEventsTable(eventsTable,
-		rsql.WithEventTimeField(eventsTimeField)))
+		rsql.WithEventTimeField(ev.TimeField)))
 }
 
 func TestCustomTypeField(t *testing.T) {
-	cache := eventsTypeField
-	defer func() {
-		eventsTypeField = cache
-	}()
-
-	eventsTypeField = "custom_type"
-
-	dbc := ConnectTestDB(t, eventsTable, "")
-	defer dbc.Close()
+	ev := DefaultEventTable()
+	ev.TypeField = "custom_type"
+	dbc := ConnectTestDB(t, ev, DefaultCursorTable())
 
 	rsql.TestEventsTable(t, dbc, rsql.NewEventsTable(eventsTable,
-		rsql.WithEventTypeField(eventsTypeField)))
+		rsql.WithEventTypeField(ev.TypeField)))
 }
 
 func TestCustomForeignIDField(t *testing.T) {
-	cache := eventsForeignIDField
-	defer func() {
-		eventsForeignIDField = cache
-	}()
-
-	eventsForeignIDField = "custom_foreign_id"
-
-	dbc := ConnectTestDB(t, eventsTable, "")
-	defer dbc.Close()
+	ev := DefaultEventTable()
+	ev.ForeignIDField = "custom_foreign_id"
+	dbc := ConnectTestDB(t, ev, DefaultCursorTable())
 
 	rsql.TestEventsTable(t, dbc, rsql.NewEventsTable(eventsTable,
-		rsql.WithEventForeignIDField(eventsForeignIDField)))
+		rsql.WithEventForeignIDField(ev.ForeignIDField)))
 }
 
 func TestForeignIDIntField(t *testing.T) {
-	cache := isEventForeignIDInt
-	defer func() {
-		isEventForeignIDInt = cache
-	}()
-
-	isEventForeignIDInt = true
-
-	dbc := ConnectTestDB(t, eventsTable, "")
-	defer dbc.Close()
+	ev := DefaultEventTable()
+	ev.IsForeignIDInt = true
+	dbc := ConnectTestDB(t, ev, DefaultCursorTable())
 
 	rsql.TestEventsTableWithID(t, dbc, rsql.NewEventsTable(eventsTable), "9999")
 }
 
-func TestTestcursorsTable(t *testing.T) {
-	dbc := ConnectTestDB(t, "", cursorsTable)
-	defer dbc.Close()
-
+func TestTestCursorsTable(t *testing.T) {
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable())
 	rsql.TestCursorsTable(t, dbc, rsql.NewCursorsTable(cursorsTable))
 }
 
 func TestCustomCursorField(t *testing.T) {
-	cache := cursorsCursorField
-	defer func() {
-		cursorsCursorField = cache
-	}()
-
-	cursorsCursorField = "`cursor`"
-
-	dbc := ConnectTestDB(t, "", cursorsTable)
-	defer dbc.Close()
+	crs := DefaultCursorTable()
+	crs.CursorField = "`cursor`"
+	dbc := ConnectTestDB(t, DefaultEventTable(), crs)
 
 	rsql.TestCursorsTable(t, dbc, rsql.NewCursorsTable(cursorsTable,
-		rsql.WithCursorCursorField(cursorsCursorField)))
+		rsql.WithCursorCursorField(crs.CursorField)))
 }
 
 func TestCustomCursorIDField(t *testing.T) {
-	cache := cursorsIDField
-	defer func() {
-		cursorsIDField = cache
-	}()
-
-	cursorsIDField = "name"
-
-	dbc := ConnectTestDB(t, "", cursorsTable)
-	defer dbc.Close()
+	crs := DefaultCursorTable()
+	crs.IDField = "name"
+	dbc := ConnectTestDB(t, DefaultEventTable(), crs)
 
 	rsql.TestCursorsTable(t, dbc, rsql.NewCursorsTable(cursorsTable,
-		rsql.WithCursorIDField(cursorsIDField)))
+		rsql.WithCursorIDField(crs.IDField)))
 }
 
 func TestCustomCursorTimeField(t *testing.T) {
-	cache := cursorsTimeField
-	defer func() {
-		cursorsTimeField = cache
-	}()
-
-	cursorsTimeField = "timestamp"
-
-	dbc := ConnectTestDB(t, "", cursorsTable)
-	defer dbc.Close()
+	crs := DefaultCursorTable()
+	crs.TimeField = "timestamp"
+	dbc := ConnectTestDB(t, DefaultEventTable(), crs)
 
 	rsql.TestCursorsTable(t, dbc, rsql.NewCursorsTable(cursorsTable,
-		rsql.WithCursorTimeField(cursorsTimeField)))
+		rsql.WithCursorTimeField(crs.TimeField)))
 }

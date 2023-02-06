@@ -4,6 +4,7 @@ import (
 	"context"
 )
 
+// NewConsumable creates a new Consumable
 // Deprecated: Please use Run.
 func NewConsumable(sFn StreamFunc, cstore CursorStore, opts ...StreamOption) Consumable {
 	return &consumable{
