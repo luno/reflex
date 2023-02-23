@@ -33,9 +33,9 @@ var (
 		Name:      "event_age_seconds",
 		Help:      "The age of events that are being processed by the consumer",
 		Buckets: []float64{
-			0.1, .25, .5, 1, 2.5, 5,
-			10, 25, 50, 100, 250, 500, // ~10 minutes
-			1_000, 2_500, 5_000, 10_000, 25_000, 50_000, // ~13 hours
+			0.1, .5, 1, 5,
+			10, 50, 100, 500, // ~10 minutes
+			1_000, 10_000, 50_000, // ~13 hours
 			100_000, // > 1 day
 		},
 	}, []string{consumerLabel})
@@ -64,7 +64,7 @@ var (
 		Subsystem: "consumer",
 		Name:      "latency_seconds",
 		Help:      "Event loop latency in seconds",
-		Buckets:   []float64{0.001, 0.01, 0.1, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0},
+		Buckets:   []float64{0.01, 0.1, 1, 5, 10, 60, 300},
 	}, []string{consumerLabel})
 
 	// ConsumerErrors is the number of errors from processing events
