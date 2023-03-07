@@ -259,7 +259,7 @@ func TestConsumeStreamLag(t *testing.T) {
 		s.client.StreamEvents,
 		s.ctable.ToStore(s.dbc),
 		reflex.NewConsumer("test", f),
-		reflex.WithStreamLag(2*time.Second),
+		reflex.WithStreamLag(2*time.Second+100*time.Millisecond), // Add 100ms just to be sure.
 	)
 	var wg sync.WaitGroup
 	wg.Add(1)

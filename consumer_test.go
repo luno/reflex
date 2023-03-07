@@ -62,6 +62,8 @@ func makeStream(_ context.Context, after string, _ ...StreamOption) (StreamClien
 func TestReuseConsumer(t *testing.T) {
 	idToFail := int64(2)
 
+	metrics.ConsumerLag.Reset()
+
 	con := NewConsumer("test", func(ctx context.Context, fate fate.Fate, event *Event) error {
 		// Should have a metric when running inside a Consume function
 		assert.Len(t, fetchMetrics(), 1)
@@ -82,8 +84,7 @@ func TestReuseConsumer(t *testing.T) {
 	jtest.RequireNil(t, err)
 	assert.Equal(t, "1", v)
 
-	// Make sure there's no metrics at the end
-	assert.Len(t, fetchMetrics(), 0)
+	assert.Len(t, fetchMetrics(), 1)
 
 	idToFail++
 
@@ -93,7 +94,7 @@ func TestReuseConsumer(t *testing.T) {
 	jtest.RequireNil(t, err)
 	assert.Equal(t, "2", v)
 
-	assert.Len(t, fetchMetrics(), 0)
+	assert.Len(t, fetchMetrics(), 1)
 }
 
 func fetchMetrics() []prometheus.Metric {

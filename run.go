@@ -59,11 +59,6 @@ func Run(in context.Context, s Spec) error {
 		defer closer.Close()
 	}
 
-	// Check if the consumer requires stopping.
-	if s, ok := s.consumer.(stopper); ok {
-		defer s.Stop()
-	}
-
 	f := fate.New()
 
 	for {

@@ -88,6 +88,14 @@ func (req Spec) Name() string {
 	return req.consumer.Name()
 }
 
+// Stop stops the spec's consumer.
+func (req Spec) Stop() error {
+	if s, ok := req.consumer.(Stopper); ok {
+		return s.Stop()
+	}
+	return nil
+}
+
 // NewSpec returns a new Spec.
 func NewSpec(stream StreamFunc, cstore CursorStore, consumer Consumer,
 	opts ...StreamOption) Spec {
@@ -113,9 +121,9 @@ type resetter interface {
 	Reset() error
 }
 
-// stopper is an optional interface that a consumer can implement indicating
+// Stopper is an optional interface that a consumer can implement indicating
 // that it has clean up work to do at the end of each Run.
-type stopper interface {
+type Stopper interface {
 	Stop() error
 }
 

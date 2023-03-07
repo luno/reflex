@@ -23,11 +23,16 @@ func RunForever(getCtx func() context.Context, req reflex.Spec) {
 		if reflex.IsExpected(err) {
 			// Just retry on expected errors.
 			time.Sleep(time.Millisecond * 100) // Don't spin
+			_ = req.Stop()
 			continue
 		}
 
 		log.Error(ctx, errors.Wrap(err, "run forever error"))
-		time.Sleep(time.Minute) // 1 min backoff on errors
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Minute): // 1 min backoff on errors
+		}
+		_ = req.Stop()
 	}
 }
 
@@ -36,6 +41,12 @@ func RunForever(getCtx func() context.Context, req reflex.Spec) {
 // Deprecated: Please use RunForever.
 func ConsumeForever(getCtx func() context.Context, consume reflex.ConsumeFunc,
 	consumer reflex.Consumer, opts ...reflex.StreamOption) {
+
+	stop := func() error { return nil }
+	if s, ok := consumer.(reflex.Stopper); ok {
+		stop = s.Stop
+	}
+
 	for {
 		ctx := getCtx()
 		ctx = log.ContextWith(ctx, j.KS("consumer", consumer.Name()))
@@ -44,10 +55,15 @@ func ConsumeForever(getCtx func() context.Context, consume reflex.ConsumeFunc,
 		if errors.IsAny(err, context.Canceled, reflex.ErrStopped, fate.ErrTempt) {
 			// Just retry on expected errors.
 			time.Sleep(time.Millisecond * 100) // Don't spin
+			_ = stop()
 			continue
 		}
 
 		log.Error(ctx, errors.Wrap(err, "consume forever error"))
-		time.Sleep(time.Minute) // 1 min backoff on errors
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Minute): // 1 min backoff on errors
+		}
+		_ = stop()
 	}
 }
