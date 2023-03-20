@@ -74,6 +74,12 @@ var (
 		Name:      "error_count",
 		Help:      "Number of errors processing events",
 	}, []string{consumerLabel})
+
+	// ConsumerSkippedEvents is the number of events skipped by consumer
+	ConsumerSkippedEvents = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "reflex_consumer_skipped_events_count",
+		Help: "Number of events skipped by consumer",
+	}, []string{consumerLabel})
 )
 
 func init() {
@@ -84,6 +90,7 @@ func init() {
 		ConsumerActivityGauge,
 		ConsumerLatency,
 		ConsumerErrors,
+		ConsumerSkippedEvents,
 	)
 }
 

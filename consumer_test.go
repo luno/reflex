@@ -10,7 +10,9 @@ import (
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/jtest"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/luno/reflex/internal/metrics"
 )
@@ -118,4 +120,78 @@ func TestConsumeFromFresh(t *testing.T) {
 		Timestamp: time.Now(),
 	})
 	jtest.RequireNil(t, err)
+}
+
+func TestConsumeWithSkip(t *testing.T) {
+	ctx := context.Background()
+	consumerName := "test_consumer"
+	f := fate.New()
+	consumedCounter := new(int)
+	cFn := func(context.Context, fate.Fate, *Event) error {
+		*consumedCounter++
+		return nil
+	}
+	evts := []*Event{
+		{
+			ID:        "1",
+			Type:      eventType(1),
+			Timestamp: time.Now(),
+		},
+		{
+			ID:        "2",
+			Type:      eventType(2),
+			Timestamp: time.Now(),
+		},
+		{
+			ID:        "3",
+			Type:      eventType(3),
+			Timestamp: time.Now(),
+		},
+	}
+
+	tcs := []struct {
+		name            string
+		c               Consumer
+		expConsumeCount int
+		expMetricCount  int
+		expSkipCount    float64
+	}{
+		{
+			name:            "no include filter provided",
+			c:               NewConsumer(consumerName, cFn),
+			expConsumeCount: 3,
+			expMetricCount:  0,
+			expSkipCount:    0,
+		},
+		{
+			name:            "empty include filter provided",
+			c:               NewConsumer(consumerName, cFn, WithFilterIncludeTypes()),
+			expConsumeCount: 3,
+			expMetricCount:  0,
+			expSkipCount:    0,
+		},
+		{
+			name:            "include filter provided",
+			c:               NewConsumer(consumerName, cFn, WithFilterIncludeTypes(eventType(1), eventType(2))),
+			expConsumeCount: 2,
+			expMetricCount:  1,
+			expSkipCount:    1,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			metrics.ConsumerSkippedEvents.Reset()
+			*consumedCounter = 0
+
+			for _, ev := range evts {
+				err := tc.c.Consume(ctx, f, ev)
+				jtest.RequireNil(t, err)
+			}
+
+			require.Equal(t, tc.expConsumeCount, *consumedCounter)
+			require.Equal(t, tc.expMetricCount, testutil.CollectAndCount(metrics.ConsumerSkippedEvents))
+			require.Equal(t, tc.expSkipCount, testutil.ToFloat64(metrics.ConsumerSkippedEvents.WithLabelValues(consumerName)))
+		})
+	}
 }

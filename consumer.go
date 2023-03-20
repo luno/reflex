@@ -19,12 +19,13 @@ type consumer struct {
 	lagAlert    time.Duration
 	activityTTL time.Duration
 
-	ageHist       prometheus.Observer
-	lagGauge      prometheus.Gauge
-	lagAlertGauge prometheus.Gauge
-	errorCounter  prometheus.Counter
-	latencyHist   prometheus.Observer
-	activityKey   string
+	ageHist            prometheus.Observer
+	lagGauge           prometheus.Gauge
+	lagAlertGauge      prometheus.Gauge
+	errorCounter       prometheus.Counter
+	latencyHist        prometheus.Observer
+	filterIncludeTypes []EventType
+	activityKey        string
 }
 
 // ConsumerOption will change the behaviour of the consumer
@@ -66,6 +67,14 @@ func WithConsumerActivityTTL(ttl time.Duration) ConsumerOption {
 func WithoutConsumerActivityTTL() ConsumerOption {
 	return func(c *consumer) {
 		c.activityTTL = -1
+	}
+}
+
+// WithFilterIncludeTypes provides an option to specify which EventTypes a consumer is interested in.
+// For uninteresting events Consume is never called, and a skipped metric is incremented.
+func WithFilterIncludeTypes(evts ...EventType) ConsumerOption {
+	return func(c *consumer) {
+		c.filterIncludeTypes = evts
 	}
 }
 
@@ -114,9 +123,14 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 	}
 	c.lagAlertGauge.Set(alert)
 
-	err := c.fn(ctx, ft, event)
-	if err != nil && !IsExpected(err) {
-		c.errorCounter.Inc()
+	var err error
+	if len(c.filterIncludeTypes) == 0 || IsAnyType(event.Type, c.filterIncludeTypes...) {
+		err = c.fn(ctx, ft, event)
+		if err != nil && !IsExpected(err) {
+			c.errorCounter.Inc()
+		}
+	} else {
+		metrics.ConsumerSkippedEvents.WithLabelValues(c.name).Inc()
 	}
 
 	latency := time.Since(t0)
