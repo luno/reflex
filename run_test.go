@@ -2,6 +2,7 @@ package reflex
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 
@@ -68,8 +69,8 @@ func TestRunDelayLag(t *testing.T) {
 			)
 			spec := NewSpec(func(ctx context.Context, after string, opts ...StreamOption) (StreamClient, error) {
 				actualOpts = opts
-				return &mockstreamclient{eventsFunc(), errDone}, nil
-			}, mockcursor{}, &consumer, tt.opt, WithStreamFromHead(), WithStreamToHead())
+				return &mockstreamclient{eventsFunc(), errDone, ""}, nil
+			}, &mockcursor{}, &consumer, tt.opt, WithStreamFromHead(), WithStreamToHead())
 
 			// Run
 			err := Run(context.Background(), spec)
@@ -92,18 +93,75 @@ func TestRunDelayLag(t *testing.T) {
 	}
 }
 
-type mockstreamclient struct {
-	Events   []*Event
-	EndError error
-}
-
-func (m *mockstreamclient) Recv() (*Event, error) {
-	if len(m.Events) == 0 {
-		return nil, m.EndError
+func TestMockStream(t *testing.T) {
+	tests := []struct {
+		name           string
+		events         []*Event
+		startCursorAt  string
+		expectedCursor string
+		expectedEvents int64
+	}{
+		{
+			name: "test mock events",
+			events: []*Event{
+				{
+					ID: "1",
+				},
+				{
+					ID: "2",
+				},
+				{
+					ID: "3",
+				},
+			},
+			expectedCursor: "3",
+			expectedEvents: 3,
+		},
+		{
+			name: "mock events with cursor",
+			events: []*Event{
+				{
+					ID: "1",
+				},
+				{
+					ID: "2",
+				},
+				{
+					ID: "3",
+				},
+			},
+			startCursorAt:  "2",
+			expectedCursor: "3",
+			expectedEvents: 1,
+		},
 	}
-	e := m.Events[0]
-	m.Events = m.Events[1:]
-	return e, nil
+
+	ctx := context.Background()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			endErr := errors.New("end of mock")
+			streamFunc := NewMockStream(tt.events, endErr)
+			consumer := &mockconsumer{}
+
+			memCursor := &mockcursor{
+				cursor: map[string]string{
+					consumer.Name(): tt.startCursorAt,
+				},
+			}
+
+			spec := NewSpec(streamFunc, memCursor, consumer)
+
+			err := Run(ctx, spec)
+			jtest.Require(t, endErr, err)
+
+			cursorResult, err := memCursor.GetCursor(ctx, consumer.Name())
+			jtest.RequireNil(t, err)
+			assert.Equal(t, tt.expectedCursor, cursorResult)
+
+			assert.Equal(t, tt.expectedEvents, int64(len(consumer.Events)))
+		})
+	}
 }
 
 type mockconsumer struct {
@@ -119,16 +177,28 @@ func (m *mockconsumer) Consume(ctx context.Context, fate fate.Fate, event *Event
 	return nil
 }
 
-type mockcursor struct{}
-
-func (m mockcursor) GetCursor(ctx context.Context, consumerName string) (string, error) {
-	return "", nil
+type mockcursor struct {
+	cursor map[string]string
 }
 
-func (m mockcursor) SetCursor(ctx context.Context, consumerName string, cursor string) error {
+func (m *mockcursor) GetCursor(_ context.Context, consumerName string) (string, error) {
+	val, exists := m.cursor[consumerName]
+	if !exists {
+		val = ""
+	}
+
+	return val, nil
+}
+
+func (m *mockcursor) SetCursor(_ context.Context, consumerName string, cursor string) error {
+	if m.cursor == nil {
+		m.cursor = make(map[string]string, 0)
+	}
+
+	m.cursor[consumerName] = cursor
 	return nil
 }
 
-func (m mockcursor) Flush(ctx context.Context) error {
+func (m *mockcursor) Flush(_ context.Context) error {
 	return nil
 }
