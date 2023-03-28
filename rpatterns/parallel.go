@@ -36,18 +36,20 @@ const (
 )
 
 type parallelConfig struct {
-	n            int
-	streamOpts   []reflex.StreamOption
-	consumerOpts []reflex.ConsumerOption
+	streamOpts []reflex.StreamOption
 
-	fmtName func(string, int, int) string
-	hashFn  func(event *reflex.Event) ([]byte, error)
+	fmtName               func(string, int, int) string
+	hashFn                func(event *reflex.Event) ([]byte, error)
+	shardConsumerOptsFunc ShardConsumerOpts
 }
 
 func getParallelConfig(opts []ParallelOption) parallelConfig {
 	c := parallelConfig{
 		fmtName: appendMofN,
 		hashFn:  keyByEventID,
+		shardConsumerOptsFunc: func(_ string) []reflex.ConsumerOption {
+			return nil
+		},
 	}
 	for _, o := range opts {
 		o(&c)
@@ -63,8 +65,9 @@ type getAckConsumerFn = func(m int) AckConsumer
 
 // ConsumerShard is one of n consumers, with a formatted name and a unique EventFilter
 type ConsumerShard struct {
-	Name   string
-	filter EventFilter
+	Name         string
+	filter       EventFilter
+	consumerOpts []reflex.ConsumerOption
 }
 
 // GetFilter gets the filter for this shard
@@ -109,9 +112,11 @@ func ConsumerShards(name string, n int, opts ...ParallelOption) []ConsumerShard 
 	conf := getParallelConfig(opts)
 	ret := make([]ConsumerShard, 0, n)
 	for m := 0; m < n; m++ {
+		shardName := conf.fmtName(name, m, n)
 		pc := ConsumerShard{
-			Name:   conf.fmtName(name, m, n),
-			filter: filterOnHash(m, n, conf.hashFn),
+			Name:         shardName,
+			filter:       filterOnHash(m, n, conf.hashFn),
+			consumerOpts: conf.shardConsumerOptsFunc(shardName),
 		}
 		ret = append(ret, pc)
 	}
@@ -168,7 +173,7 @@ func ParallelSpecs(name string, n int,
 	for _, shard := range ConsumerShards(name, n, opts...) {
 		specs = append(specs,
 			reflex.NewSpec(stream, store,
-				ParallelConsumer(shard, consume, conf.consumerOpts...),
+				ParallelConsumer(shard, consume, shard.consumerOpts...),
 				conf.streamOpts...,
 			),
 		)
@@ -269,10 +274,12 @@ func WithStreamOpts(opts ...reflex.StreamOption) ParallelOption {
 	}
 }
 
-// WithConsumerOpts passes consumer options in to reflex.NewConsumer
-func WithConsumerOpts(opts ...reflex.ConsumerOption) ParallelOption {
+type ShardConsumerOpts func(string) []reflex.ConsumerOption
+
+// WithConsumerSpecificOpts gets consumer options per shard
+func WithConsumerSpecificOpts(f ShardConsumerOpts) ParallelOption {
 	return func(pc *parallelConfig) {
-		pc.consumerOpts = append(pc.consumerOpts, opts...)
+		pc.shardConsumerOptsFunc = f
 	}
 }
 
