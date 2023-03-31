@@ -129,12 +129,12 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 		if err != nil && !IsExpected(err) {
 			c.errorCounter.Inc()
 		}
+
+		latency := time.Since(t0)
+		c.latencyHist.Observe(latency.Seconds())
 	} else {
 		metrics.ConsumerSkippedEvents.WithLabelValues(c.name).Inc()
 	}
-
-	latency := time.Since(t0)
-	c.latencyHist.Observe(latency.Seconds())
 
 	return err
 }
