@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package reflexpb;
 
+option go_package = "github.com/luno/reflex/reflexpb";
+
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
@@ -23,6 +25,7 @@ message Event {
   string foreign_id = 5;
   string id = 6;
   bytes metadata = 7;
+  bytes trace = 8;
 }
 
 message StreamOptions {
@@ -30,4 +33,9 @@ message StreamOptions {
   bool fromHead = 2;
   reserved 3;
   bool toHead = 4;
+}
+
+message Trace {
+  string trace_id = 1;
+  string span_id = 2;
 }

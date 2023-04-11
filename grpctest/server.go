@@ -57,6 +57,7 @@ type Server struct {
 	cstore      reflex.CursorStore
 	rserver     *reflex.Server
 	sentCounter prometheus.Counter
+	reflexpb.UnimplementedReflexServer
 }
 
 // Stream creates a new stream

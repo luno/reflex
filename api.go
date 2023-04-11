@@ -17,6 +17,7 @@ type Event struct {
 	ForeignID string
 	Timestamp time.Time
 	MetaData  []byte
+	Trace     []byte
 }
 
 // IDInt returns the event id as an int64 or 0 if it is not an integer.

@@ -20,6 +20,7 @@ func eventToProto(e *Event) (*reflexpb.Event, error) {
 		Type:      int32(e.Type.ReflexType()),
 		Timestamp: ts,
 		Metadata:  e.MetaData,
+		Trace:     e.Trace,
 	}, nil
 }
 
@@ -35,6 +36,7 @@ func eventFromProto(e *reflexpb.Event) (*Event, error) {
 		Type:      eventType(e.Type),
 		Timestamp: ts,
 		MetaData:  e.Metadata,
+		Trace:     e.Trace,
 	}, nil
 }
 

@@ -11,8 +11,8 @@ import (
 	"github.com/luno/jettison"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
-
 	"github.com/luno/reflex"
+	"github.com/luno/reflex/internal/tracing"
 )
 
 const (
@@ -21,6 +21,7 @@ const (
 	defaultEventTypeField      = "type"
 	defaultEventForeignIDField = "foreign_id"
 	defaultMetadataField       = "" // disabled
+	defaultTraceField          = "" // default is empty to support backwards compatibility
 )
 
 // eventType is the rsql internal implementation of EventType interface.
@@ -46,6 +47,17 @@ func makeDefaultInserter(schema etableSchema) inserter {
 			return errors.New("metadata not enabled")
 		}
 
+		spanCtx, hasTrace := tracing.Extract(ctx)
+		if schema.traceField != "" && hasTrace {
+			traceData, err := tracing.Marshal(spanCtx)
+			if err != nil {
+				return err
+			}
+
+			q += ", " + schema.traceField + "=?"
+			args = append(args, traceData)
+		}
+
 		_, err := tx.ExecContext(ctx, q, args...)
 		return errors.Wrap(err, "insert error")
 	}
@@ -61,7 +73,7 @@ func scan(row row) (*reflex.Event, error) {
 		id int64
 		t  eventType
 	)
-	err := row.Scan(&id, &e.ForeignID, &e.Timestamp, &t, &e.MetaData)
+	err := row.Scan(&id, &e.ForeignID, &e.Timestamp, &t, &e.MetaData, &e.Trace)
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +102,12 @@ func getNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
 	q += "select " + schema.idField + ", " + schema.foreignIDField + ", " + schema.timeField + ", " + schema.typeField
 	if schema.metadataField != "" {
 		q += " , " + schema.metadataField
+	} else {
+		q += ", null"
+	}
+
+	if schema.traceField != "" {
+		q += ", " + schema.traceField
 	} else {
 		q += ", null"
 	}

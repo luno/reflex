@@ -27,6 +27,7 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 			typeField:      defaultEventTypeField,
 			foreignIDField: defaultEventForeignIDField,
 			metadataField:  defaultMetadataField,
+			traceField:     defaultTraceField,
 		},
 		options: options{
 			notifier: &stubNotifier{},
@@ -89,6 +90,13 @@ func WithEventForeignIDField(field string) EventsOption {
 func WithEventMetadataField(field string) EventsOption {
 	return func(table *EventsTable) {
 		table.schema.metadataField = field
+	}
+}
+
+// WithEventTraceField provides an option to persist an opentelemetry trace through the events stream
+func WithEventTraceField(field string) EventsOption {
+	return func(table *EventsTable) {
+		table.schema.traceField = field
 	}
 }
 
@@ -315,6 +323,7 @@ type etableSchema struct {
 	typeField      string
 	foreignIDField string
 	metadataField  string
+	traceField     string
 }
 
 type streamclient struct {

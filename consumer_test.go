@@ -13,8 +13,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/luno/reflex/internal/metrics"
+	"github.com/luno/reflex/internal/tracing"
 )
 
 type stream int64
@@ -120,6 +124,50 @@ func TestConsumeFromFresh(t *testing.T) {
 		Timestamp: time.Now(),
 	})
 	jtest.RequireNil(t, err)
+}
+
+func TestPassTraceIntoConsumerContext(t *testing.T) {
+	t.Run("Ensure trace is loaded into context as parent and passed to consumer func", func(t *testing.T) {
+		tp := tracesdk.NewTracerProvider()
+		otel.SetTracerProvider(tp)
+
+		traceID, err := trace.TraceIDFromHex("00000000000000000000000000000009")
+		jtest.RequireNil(t, err)
+
+		spanID, err := trace.SpanIDFromHex("0000000000000002")
+		jtest.RequireNil(t, err)
+
+		expectedSpanCtx := trace.NewSpanContext(
+			trace.SpanContextConfig{
+				TraceID: traceID,
+				SpanID:  spanID,
+			},
+		)
+
+		spanJson, err := tracing.Marshal(expectedSpanCtx)
+		jtest.RequireNil(t, err)
+
+		e := &Event{
+			ID:        "1",
+			Type:      sType(1),
+			Timestamp: time.Now(),
+			Trace:     spanJson,
+		}
+
+		c := NewConsumer("test",
+			func(ctx context.Context, f fate.Fate, e *Event) error {
+
+				span := trace.SpanFromContext(ctx)
+				require.Equal(t, expectedSpanCtx.TraceID().String(), span.SpanContext().TraceID().String())
+				require.Equal(t, expectedSpanCtx.TraceState().String(), span.SpanContext().TraceState().String())
+
+				return nil
+			},
+		)
+
+		err = c.Consume(context.Background(), fate.New(), e)
+		jtest.RequireNil(t, err)
+	})
 }
 
 func TestConsumeWithSkip(t *testing.T) {

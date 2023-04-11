@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/luno/reflex/internal/metrics"
+	"github.com/luno/reflex/internal/tracing"
 )
 
 const defaultLagAlert = 30 * time.Minute
@@ -122,6 +123,13 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 		alert = 1
 	}
 	c.lagAlertGauge.Set(alert)
+
+	hasTraceData := len(event.Trace) > 0
+	if hasTraceData {
+		// Load any trace information into the context to allow logging with trace id and manually
+		// configuring a trace from within the consumer.
+		ctx = tracing.Inject(ctx, event.Trace)
+	}
 
 	var err error
 	if len(c.filterIncludeTypes) == 0 || IsAnyType(event.Type, c.filterIncludeTypes...) {

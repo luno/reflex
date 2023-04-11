@@ -1,6 +1,6 @@
-// This file is used to compile the apikeyspb package's proto files.
+// This file is used to compile the reflexpb package's proto files.
 // Usage: go generate <path to this directory>
 
-//go:generate protoc -I=${GOPATH}/src -I=. --go_out=plugins=grpc:. ./reflex.proto
+//go:generate protoc --go_out=. --go-grpc_out=. --go_opt=paths=source_relative --go-grpc_opt=paths=source_relative ./reflex.proto
 
 package reflexpb
