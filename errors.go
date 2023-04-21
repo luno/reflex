@@ -20,6 +20,9 @@ var (
 	// the stream of events.
 	ErrHeadReached = errors.New("the event stream has reached the current head", j.C("ERR_b4b155d2a91cfcd0"))
 
+	// ErrFiltered is returned when an event should not be processed by a particular consumer due to filtering e.g. sharding
+	ErrFiltered = errors.New("the event was filtered", j.C("ERR_f57bd22783bd088c"))
+
 	cancelProto   = status.FromContextError(context.Canceled).Proto()
 	deadlineProto = status.FromContextError(context.DeadlineExceeded).Proto()
 )
@@ -36,7 +39,7 @@ func IsHeadReachedErr(err error) bool {
 
 // IsExpected returns true if the error is expected during normal streaming operation.
 func IsExpected(err error) bool {
-	if errors.IsAny(err, context.Canceled, context.DeadlineExceeded, ErrStopped, fate.ErrTempt) {
+	if errors.IsAny(err, context.Canceled, context.DeadlineExceeded, ErrStopped, fate.ErrTempt, ErrFiltered) {
 		return true
 	}
 

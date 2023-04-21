@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/luno/fate"
+	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/j"
 
 	"github.com/luno/reflex"
 )
@@ -133,9 +135,17 @@ func ParallelConsumer(
 ) reflex.Consumer {
 	filteredConsume := func(ctx context.Context, fate fate.Fate, event *reflex.Event) error {
 		mine, err := shard.filter(event)
-		if err != nil || !mine {
+		if err != nil {
 			return err
 		}
+
+		if !mine {
+			return errors.Wrap(reflex.ErrFiltered, "", j.MKV{
+				"event_id":   event.IDInt(),
+				"foreign_id": event.ForeignID,
+			})
+		}
+
 		return consume(ctx, fate, event)
 	}
 	return reflex.NewConsumer(shard.Name, filteredConsume, opts...)

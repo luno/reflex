@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/luno/fate"
+	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/jtest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/luno/reflex"
@@ -161,6 +163,33 @@ func TestParallel(t *testing.T) {
 			require.EqualValues(t, test.expexted, res)
 		})
 	}
+}
+
+func TestParallelConsumer(t *testing.T) {
+	shards := rpatterns.ConsumerShards("consumer_name", 2, rpatterns.WithHashOption(rpatterns.HashOptionEventID))
+	var consumers []reflex.Consumer
+	for _, s := range shards {
+		consumers = append(consumers, rpatterns.ParallelConsumer(s,
+			func(ctx context.Context, f fate.Fate, event *reflex.Event) error {
+				return nil
+			}))
+	}
+
+	evt := &reflex.Event{
+		ID: "1",
+	}
+
+	// Run same event through both consumers. One should process, the other should throw reflex.ErrFiltered
+	var gotFiltered bool
+	for _, c := range consumers {
+		err := c.Consume(context.Background(), fate.New(), evt)
+		if errors.Is(err, reflex.ErrFiltered) {
+			gotFiltered = true
+			continue
+		}
+		jtest.RequireNil(t, err)
+	}
+	require.True(t, gotFiltered)
 }
 
 func fromIDs(ids ...int) []*reflex.Event {

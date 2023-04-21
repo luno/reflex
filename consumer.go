@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/luno/fate"
+	"github.com/luno/jettison/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/luno/reflex/internal/metrics"
@@ -138,8 +139,10 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 			c.errorCounter.Inc()
 		}
 
-		latency := time.Since(t0)
-		c.latencyHist.Observe(latency.Seconds())
+		if !errors.Is(err, ErrFiltered) {
+			latency := time.Since(t0)
+			c.latencyHist.Observe(latency.Seconds())
+		}
 	} else {
 		metrics.ConsumerSkippedEvents.WithLabelValues(c.name).Inc()
 	}
