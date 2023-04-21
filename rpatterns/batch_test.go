@@ -9,10 +9,11 @@ import (
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/jtest"
-	"github.com/luno/reflex"
-	"github.com/luno/reflex/rpatterns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/luno/reflex"
+	"github.com/luno/reflex/rpatterns"
 )
 
 func TestRunBatchConsumer(t *testing.T) {
@@ -60,17 +61,10 @@ func TestRunBatchConsumer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var (
-				mu          sync.Mutex
-				results     []rpatterns.Batch
-				doneCount   = tt.expectedBatches
-				errConsumed = errors.New("consumer done")
-				emptyDelay  time.Duration
+				mu         sync.Mutex
+				results    []rpatterns.Batch
+				emptyDelay time.Duration
 			)
-
-			if !tt.partialBatch {
-				// Do not trigger stream empty error if consumer must error.
-				emptyDelay = time.Hour
-			}
 
 			b := &bootstrapMock{
 				events:     ItoEList(tt.inEvents...),
@@ -78,7 +72,7 @@ func TestRunBatchConsumer(t *testing.T) {
 				gets:       []string{""},
 			}
 			if !tt.partialBatch {
-				// Add one more event to trigger consumer errConsumed.
+				// Add one more event to trigger consumer.
 				b.events = append(b.events, ItoE(0))
 			}
 
@@ -87,22 +81,13 @@ func TestRunBatchConsumer(t *testing.T) {
 				defer mu.Unlock()
 
 				results = append(results, b)
-
-				if len(results) == doneCount && !tt.partialBatch {
-					return errConsumed
-				}
-
 				return nil
 			}
 
 			consumer := rpatterns.NewBatchConsumer(tt.name, b, f, 0, tt.batchLen)
 			spec := rpatterns.NewBatchSpec(b.Stream, consumer)
 			err := reflex.Run(context.Background(), spec)
-			if tt.partialBatch {
-				jtest.Assert(t, errEvents, err)
-			} else {
-				jtest.Assert(t, errConsumed, err)
-			}
+			jtest.Assert(t, errEvents, err)
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -113,13 +98,7 @@ func TestRunBatchConsumer(t *testing.T) {
 				assert.Len(t, batch, tt.batchLen)
 			}
 
-			// Normally we error on last best set.
-			expectedSets := tt.expectedBatches - 1
-			if tt.partialBatch {
-				// Partial batches don't error on last set.
-				expectedSets += 1
-			}
-			require.Len(t, b.sets, expectedSets)
+			require.Len(t, b.sets, tt.expectedBatches)
 		})
 	}
 }
@@ -192,4 +171,64 @@ func TestInvalidConfig(t *testing.T) {
 	ctx := context.Background()
 	err := reflex.Run(ctx, spec)
 	jtest.Assert(t, errors.New("batchPeriod or batchLen must be non-zero"), err)
+}
+
+type EventList struct {
+	Ctx    context.Context
+	Idx    int
+	Events []*reflex.Event
+	Stop   chan struct{}
+}
+
+func (l *EventList) Recv() (*reflex.Event, error) {
+	if l.Idx >= len(l.Events) {
+		select {
+		case <-l.Stop:
+			return nil, reflex.ErrHeadReached
+		case <-l.Ctx.Done():
+			return nil, l.Ctx.Err()
+		}
+	}
+	e := l.Events[l.Idx]
+	l.Idx++
+	return e, nil
+}
+
+func TestBatchError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	el := EventList{Ctx: ctx, Events: ItoEList(1, 2, 3), Stop: make(chan struct{})}
+	stream := func(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error) {
+		return &(el), nil
+	}
+
+	batches := make(chan rpatterns.Batch)
+	cs := rpatterns.MemCursorStore()
+	consumer := rpatterns.NewBatchConsumer("test", cs,
+		func(ctx context.Context, f fate.Fate, batch rpatterns.Batch) error {
+			batches <- batch
+			return errors.New("whoops")
+		},
+		time.Second, 3,
+	)
+
+	spec := rpatterns.NewBatchSpec(stream, consumer)
+
+	go func() {
+		defer close(batches)
+		err := reflex.Run(ctx, spec)
+		jtest.Assert(t, reflex.ErrHeadReached, err)
+	}()
+
+	for bNo := 0; bNo < 3; bNo++ {
+		b, ok := <-batches
+		if !ok {
+			break
+		}
+		assert.Len(t, b, 3)
+	}
+	close(el.Stop)
+
+	<-batches
 }

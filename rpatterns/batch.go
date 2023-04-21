@@ -140,18 +140,12 @@ func (c *BatchConsumer) flushForever() {
 
 		// Time to flush
 		buf := c.buf
-		c.buf = nil
-		batchConsumerBufferLength.WithLabelValues(c.name).Set(0)
-		c.start = time.Time{}
 
-		var (
-			b    Batch
-			last *AckEvent
-		)
+		var b Batch
 		for _, e := range buf {
 			b = append(b, &e.Event)
-			last = e
 		}
+		last := buf[len(buf)-1]
 
 		err := c.consume(c.ctx, c.fate, b)
 		if err != nil {
@@ -160,6 +154,10 @@ func (c *BatchConsumer) flushForever() {
 		} else if err = last.Ack(c.ctx); err != nil {
 			log.Error(c.ctx, errors.Wrap(err, "batch ack error"))
 			c.err = err
+		} else {
+			c.buf = nil
+			c.start = time.Time{}
+			batchConsumerBufferLength.WithLabelValues(c.name).Set(0)
 		}
 
 		c.mu.Unlock()
