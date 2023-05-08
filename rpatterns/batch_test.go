@@ -313,7 +313,7 @@ func TestContextCancelled(t *testing.T) {
 				}
 			}
 
-			return nil
+			return f.Tempt()
 		},
 		time.Second, 5,
 	)
@@ -387,7 +387,7 @@ func TestBatchPeriod(t *testing.T) {
 				}
 			}
 
-			return nil
+			return f.Tempt()
 		},
 		time.Millisecond*10, 0,
 	)
@@ -452,7 +452,7 @@ func TestBatchErrorState(t *testing.T) {
 					processTracker[b.IDInt()] = true
 				}
 
-				return nil
+				return f.Tempt()
 			}
 		},
 		time.Millisecond, 0,

@@ -129,14 +129,14 @@ func processEvents(
 	flushLen int,
 
 	fnConsume BatchConsumeFn) {
-	var batch []*AckEvent
-	var flushTimer <-chan time.Time
+	var (
+		batch      []*AckEvent
+		flushTimer <-chan time.Time
+		f          fate.Fate
+	)
 
 	for {
-		var (
-			f            fate.Fate
-			timerExpired bool
-		)
+		var timerExpired bool
 
 		select {
 		case ev := <-chEvents:
