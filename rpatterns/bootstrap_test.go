@@ -167,5 +167,6 @@ func ItoE(i int) *reflex.Event {
 		ID:        strconv.Itoa(i),
 		ForeignID: strconv.Itoa(i),
 		Type:      testEventType(i),
+		Timestamp: time.Now(),
 	}
 }

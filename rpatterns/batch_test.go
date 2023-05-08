@@ -2,6 +2,8 @@ package rpatterns_test
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -198,6 +200,8 @@ func TestBatchError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	expErr := errors.New("whoops")
+
 	el := EventList{Ctx: ctx, Events: ItoEList(1, 2, 3), Stop: make(chan struct{})}
 	stream := func(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error) {
 		return &(el), nil
@@ -208,7 +212,7 @@ func TestBatchError(t *testing.T) {
 	consumer := rpatterns.NewBatchConsumer("test", cs,
 		func(ctx context.Context, f fate.Fate, batch rpatterns.Batch) error {
 			batches <- batch
-			return errors.New("whoops")
+			return expErr
 		},
 		time.Second, 3,
 	)
@@ -218,7 +222,7 @@ func TestBatchError(t *testing.T) {
 	go func() {
 		defer close(batches)
 		err := reflex.Run(ctx, spec)
-		jtest.Assert(t, reflex.ErrHeadReached, err)
+		jtest.Assert(t, expErr, err)
 	}()
 
 	for bNo := 0; bNo < 3; bNo++ {
@@ -231,4 +235,269 @@ func TestBatchError(t *testing.T) {
 	close(el.Stop)
 
 	<-batches
+}
+
+type EventsMax struct {
+	Idx         int
+	Max         int
+	chDone      chan any
+	chNextEvent chan any
+	wait        time.Duration
+}
+
+func (l *EventsMax) Recv() (*reflex.Event, error) {
+	if l.Idx >= l.Max {
+		l.chDone <- struct{}{}
+	}
+
+	if l.chNextEvent != nil {
+		// Wait until signal to continue
+		<-l.chNextEvent
+	}
+
+	l.Idx++
+	ev := reflex.Event{
+		ID:        strconv.Itoa(l.Idx),
+		Type:      testEventType(l.Idx),
+		ForeignID: strconv.Itoa(l.Idx),
+		Timestamp: time.Now(),
+	}
+
+	time.Sleep(l.wait)
+
+	return &ev, nil
+}
+
+type ctxCancel struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+func TestContextCancelled(t *testing.T) {
+	chGetCtx := make(chan ctxCancel)
+	chCancelCtx := make(chan any)
+
+	fnGetCtx := func() context.Context {
+		ctx := <-chGetCtx
+		return ctx.ctx
+	}
+
+	processTracker := make(map[int64]bool)
+
+	cancelCtxEvents := []int64{10, 25, 50}
+
+	chDone := make(chan any)
+
+	events := EventsMax{Max: 100, chDone: chDone}
+	stream := func(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error) {
+		idx, _ := strconv.Atoi(after)
+		events.Idx = idx
+		return &events, nil
+	}
+
+	cs := rpatterns.MemCursorStore()
+	consumer := rpatterns.NewBatchConsumer("test", cs,
+		func(ctx context.Context, f fate.Fate, batch rpatterns.Batch) error {
+			if ctx.Err() != nil {
+				return context.Canceled
+			}
+			for _, b := range batch {
+				_, ok := processTracker[b.IDInt()]
+				assert.False(t, ok, "event id already processed", b.ID)
+
+				processTracker[b.IDInt()] = true
+				for _, can := range cancelCtxEvents {
+					if b.IDInt() == can {
+						chCancelCtx <- struct{}{}
+					}
+				}
+			}
+
+			return nil
+		},
+		time.Second, 5,
+	)
+
+	spec := rpatterns.NewBatchSpec(stream, consumer)
+	go func() {
+		rpatterns.RunForever(fnGetCtx, spec)
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	for {
+		if ctx.Err() != nil {
+			ctx, cancel = context.WithCancel(context.Background())
+		}
+
+		var isDone bool
+
+		select {
+		case chGetCtx <- ctxCancel{
+			ctx:    ctx,
+			cancel: cancel,
+		}:
+		case <-chCancelCtx:
+			cancel()
+		case <-ctx.Done():
+		case <-chDone:
+			isDone = true
+		case <-time.After(time.Second * 5):
+			assert.Fail(t, "test timed out")
+			isDone = true
+		}
+
+		if isDone {
+			break
+		}
+	}
+
+	for idx := 1; idx <= events.Max; idx++ {
+		_, ok := processTracker[int64(idx)]
+		if !ok {
+			assert.Equal(t, true, ok, fmt.Sprintf("event id %d not processed", idx))
+		}
+	}
+}
+
+func TestBatchPeriod(t *testing.T) {
+	processTracker := make(map[int64]bool)
+
+	ctx := context.Background()
+
+	chDone := make(chan any)
+
+	events := EventsMax{Max: 50, wait: time.Millisecond}
+	stream := func(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error) {
+		idx, _ := strconv.Atoi(after)
+		events.Idx = idx
+		return &events, nil
+	}
+
+	cs := rpatterns.MemCursorStore()
+	consumer := rpatterns.NewBatchConsumer("test", cs,
+		func(ctx context.Context, f fate.Fate, batch rpatterns.Batch) error {
+			for _, b := range batch {
+				_, ok := processTracker[b.IDInt()]
+				assert.False(t, ok, "event id already processed", b.ID)
+
+				processTracker[b.IDInt()] = true
+				if b.IDInt() == int64(events.Max) {
+					chDone <- struct{}{}
+				}
+			}
+
+			return nil
+		},
+		time.Millisecond*10, 0,
+	)
+
+	spec := rpatterns.NewBatchSpec(stream, consumer)
+	go func() {
+		rpatterns.RunForever(func() context.Context {
+			return ctx
+		}, spec)
+	}()
+
+	select {
+	case <-chDone:
+	case <-time.After(time.Second * 5):
+		assert.Fail(t, "test timed out")
+	}
+
+	for idx := 1; idx <= events.Max; idx++ {
+		_, ok := processTracker[int64(idx)]
+		if !ok {
+			assert.Equal(t, true, ok, fmt.Sprintf("event id %d not processed", idx))
+		}
+	}
+}
+
+func TestBatchErrorState(t *testing.T) {
+	ctx := context.Background()
+
+	processTracker := make(map[int64]bool)
+
+	// Ensure events are processed one-by-one for testing purposes
+	chNextEvent := make(chan any, 1)
+	chDone := make(chan any)
+
+	events := EventsMax{Max: 100, chNextEvent: chNextEvent, chDone: chDone}
+	stream := func(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error) {
+		idx, _ := strconv.Atoi(after)
+		events.Idx = idx
+		return &events, nil
+	}
+
+	someError := errors.New("some error")
+
+	chErr := make(chan error)
+
+	returnError := true
+
+	cs := rpatterns.MemCursorStore()
+	consumer := rpatterns.NewBatchConsumer("test", cs,
+		func(ctx context.Context, f fate.Fate, batch rpatterns.Batch) error {
+			chNextEvent <- struct{}{}
+
+			// Error on first attempt. Second attempt should be fine
+			if returnError {
+				returnError = false
+				return someError
+			} else {
+				for _, b := range batch {
+					_, ok := processTracker[b.IDInt()]
+					assert.False(t, ok, "event id already processed", b.ID)
+
+					processTracker[b.IDInt()] = true
+				}
+
+				return nil
+			}
+		},
+		time.Millisecond, 0,
+	)
+
+	spec := rpatterns.NewBatchSpec(stream, consumer)
+	runProcessor := func() {
+		chErr <- reflex.Run(ctx, spec)
+	}
+
+	// Run processor until second event which will trigger an ErrBatchState
+	go runProcessor()
+
+	// Signal first event
+	chNextEvent <- struct{}{}
+
+	select {
+	case err := <-chErr:
+		assert.True(t, errors.Is(err, rpatterns.ErrBatchState))
+	case <-time.After(time.Second * 5):
+		assert.Fail(t, "test timed out")
+	}
+
+	// Cursor would be on event 2 which is the one that triggers the ErrBatchState
+	assert.Equal(t, 2, events.Idx)
+
+	go runProcessor()
+
+	// Signal first event
+	chNextEvent <- struct{}{}
+
+	select {
+	case <-chErr:
+		assert.Fail(t, "unexpected error return")
+	case <-chDone:
+		time.Sleep(time.Millisecond * 100) // Wait for last event to process since it's a background process
+		// Batch recovered
+	case <-time.After(time.Second * 5):
+		assert.Fail(t, "test timed out")
+	}
+
+	for idx := 1; idx <= events.Max; idx++ {
+		_, ok := processTracker[int64(idx)]
+		if !ok {
+			assert.Equal(t, true, ok, fmt.Sprintf("event id %d not processed", idx))
+		}
+	}
 }

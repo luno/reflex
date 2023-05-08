@@ -25,9 +25,15 @@ func Run(in context.Context, s Spec) error {
 		return errors.Wrap(err, "get cursor error")
 	}
 
-	// Check if the consumer requires reset.
-	if resetter, ok := s.consumer.(resetter); ok {
-		err := resetter.Reset()
+	// Check if the consumer requires to be reset.
+	switch r := s.consumer.(type) {
+	case ResetterCtx:
+		err = r.Reset(ctx)
+		if err != nil {
+			return errors.Wrap(err, "reset error")
+		}
+	case resetter:
+		err = r.Reset()
 		if err != nil {
 			return errors.Wrap(err, "reset error")
 		}

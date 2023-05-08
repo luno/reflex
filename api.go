@@ -122,6 +122,12 @@ type resetter interface {
 	Reset() error
 }
 
+// ResetterCtx is an optional interface that a consumer can implement indicating
+// that it is stateful and requires reset at the start of each Run.
+type ResetterCtx interface {
+	Reset(context.Context) error
+}
+
 // Stopper is an optional interface that a consumer can implement indicating
 // that it has clean up work to do at the end of each Run.
 type Stopper interface {

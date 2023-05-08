@@ -2,21 +2,27 @@ package rpatterns
 
 import (
 	"context"
-	"sync"
+	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/log"
 	"time"
 
 	"github.com/luno/fate"
-	"github.com/luno/jettison/errors"
-	"github.com/luno/jettison/log"
-
 	"github.com/luno/reflex"
 )
 
 // Batch is a batch of reflex events.
 type Batch []*reflex.Event
 
-// flushSleep duration is aliased for testing.
-var flushSleep = time.Second
+type BatchConsumeFn func(context.Context, fate.Fate, Batch) error
+
+type batchEvent struct {
+	ackEvent *AckEvent
+	f        fate.Fate
+}
+
+const minWait = time.Millisecond * 100
+
+var ErrBatchState = errors.New("batch error state")
 
 // BatchConsumer provides a reflex consumer that buffers events
 // and flushes a batch to the consume function when either
@@ -27,141 +33,179 @@ var flushSleep = time.Second
 //
 // This consumer is stateful. If the underlying stream errors
 // reflex needs to be reset it to clear its state. It therefore
-// implements the resetter interface.
+// implements the resetter interface. The consumer also implements
+// the stopper interface to stop the processing go-routine when the
+// run completes.
 //
-// Flushing of batches are async and errors are returned on reset or
-// when the next event is received from the stream.
+// When the batch reaches capacity, the processing happens synchronously
+// and the result is returned with the enqueue request. When the flush
+// period is reached prior to batch capacity, processing happens asynchronously
+// and the result will be returned when the next event is added to the queue.
 // It assumes that the stream is reset to the previous cursor
 // before sending subsequent events.
 type BatchConsumer struct {
 	*AckConsumer
-	consume func(context.Context, fate.Fate, Batch) error
+	consume BatchConsumeFn
 
-	flushPeriod  time.Duration
-	flushLen     int
-	flushStarted bool
+	flushPeriod time.Duration
+	flushLen    int
 
-	buf     []*AckEvent
-	start   time.Time
-	ctx     context.Context
-	fate    fate.Fate
-	err     error
-	mu      sync.Mutex
-	trigger chan struct{}
+	chEvent  chan batchEvent
+	chResult chan error
+	chExit   chan any
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // Reset ensures that the buffer and error is cleared
 // enabling a clean run of the consumer whilst returning
 // any errors that were found in the consumer.
-func (c *BatchConsumer) Reset() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *BatchConsumer) Reset(ctx context.Context) error {
+	c.ctx, c.cancel = context.WithCancel(ctx)
 
-	c.buf = nil
-	batchConsumerBufferLength.WithLabelValues(c.name).Set(0)
+	c.chResult = make(chan error)
+	c.chEvent = make(chan batchEvent)
+	c.chExit = make(chan any)
 
-	if c.err != nil {
-		err := c.err
-		c.err = nil
-		return err
-	}
+	go func() {
+		defer close(c.chExit)
+		defer close(c.chResult)
+
+		processEvents(
+			c.ctx,
+			c.chEvent,
+			c.chResult,
+			c.flushPeriod,
+			c.flushLen,
+			c.consume)
+	}()
 	return nil
 }
 
-// enqueue adds the event to the buffer or returns the previous flush error.
+func (c *BatchConsumer) Stop() error {
+	c.cancel()
+
+	// Wait for processing thread to exit
+	<-c.chExit
+
+	return nil
+}
+
+// enqueue adds the event to the buffer or returns error if batch needs to be reset.
 func (c *BatchConsumer) enqueue(ctx context.Context, f fate.Fate, e *AckEvent) error {
 	if c.flushPeriod == 0 && c.flushLen == 0 {
 		return errors.New("batchPeriod or batchLen must be non-zero")
 	}
 
-	// Flushing of the batch is async, so avoid adding too many to the batch
-	// by waiting a bit if the batch is full.
-	waitFlush := func() bool {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-
-		return len(c.buf) >= c.flushLen
-	}
-
-	for waitFlush() {
-		time.Sleep(time.Microsecond)
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.err != nil {
-		err := c.err
-		c.err = nil
-		return err
-	}
-
-	if len(c.buf) == 0 {
-		c.ctx = ctx
-		c.fate = f
-		c.start = time.Now()
-	}
-
-	if !c.flushStarted {
-		c.flushStarted = true
-		go c.flushForever()
-	}
-
-	c.buf = append(c.buf, e)
-	batchConsumerBufferLength.WithLabelValues(c.name).Set(float64(len(c.buf)))
-
+	// Add event to batch queue
 	select {
-	case c.trigger <- struct{}{}:
-	default:
+	case c.chEvent <- batchEvent{ackEvent: e, f: f}:
+	case _, ok := <-c.chResult:
+		if !ok {
+			return ErrBatchState
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	// Wait for result
+	select {
+	case err := <-c.chResult:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// processEvents receive events until buffer is full or flush period expired. Clear buffer once processed.
+func processEvents(
+	ctx context.Context,
+
+	chEvents chan batchEvent,
+	chResult chan error,
+
+	flushPeriod time.Duration,
+	flushLen int,
+
+	fnConsume BatchConsumeFn) {
+	var batch []*AckEvent
+	var flushTimer <-chan time.Time
+
+	for {
+		var (
+			f            fate.Fate
+			timerExpired bool
+		)
+
+		select {
+		case ev := <-chEvents:
+			f = ev.f
+
+			if len(batch) == 0 && flushPeriod != 0 {
+				wait := ev.ackEvent.Timestamp.Add(flushPeriod).Sub(time.Now())
+
+				// If the processor is running behind, set a minimum wait time to
+				// avoid events being processed one-by-one
+				if wait < 0 {
+					wait = minWait
+				}
+
+				flushTimer = time.After(wait)
+			}
+
+			batch = append(batch, ev.ackEvent)
+			if flushLen == 0 || len(batch) < flushLen {
+				select {
+				case chResult <- nil:
+					continue
+				case <-ctx.Done():
+					return
+				}
+			}
+		case <-flushTimer:
+			timerExpired = true
+		case <-ctx.Done():
+			return
+		}
+
+		err := processBatch(ctx, f, batch, fnConsume)
+
+		if !timerExpired || err != nil && timerExpired {
+			// If flushTimer expired (background processing), terminate processing and set to error state
+			if timerExpired {
+				log.Error(ctx, errors.Wrap(err, "batch processing error"))
+				return
+			}
+
+			select {
+			case chResult <- err:
+			case <-ctx.Done():
+				return
+			}
+		}
+
+		batch = nil
+		flushTimer = nil
+	}
+}
+
+func processBatch(ctx context.Context, f fate.Fate, batch []*AckEvent, fnConsume BatchConsumeFn) error {
+	var b Batch
+	for _, e := range batch {
+		b = append(b, &e.Event)
+	}
+	last := batch[len(batch)-1]
+
+	err := fnConsume(ctx, f, b)
+	if err != nil {
+		return errors.Wrap(err, "batch consumer error")
+	}
+	if err = last.Ack(ctx); err != nil {
+		return errors.Wrap(err, "batch ack error")
 	}
 
 	return nil
-}
-
-func (c *BatchConsumer) flushForever() {
-	flushTicker := time.NewTicker(flushSleep)
-	defer flushTicker.Stop()
-
-	for {
-		select {
-		case <-flushTicker.C:
-		case <-c.trigger:
-		}
-
-		c.mu.Lock()
-
-		reachedPeriod := !c.start.IsZero() && c.flushPeriod != 0 && time.Since(c.start) >= c.flushPeriod
-		reachedSize := c.flushLen != 0 && len(c.buf) >= c.flushLen
-		if !reachedPeriod && !reachedSize {
-			// Not time yet, sleep some more.
-			c.mu.Unlock()
-			continue
-		}
-
-		// Time to flush
-		buf := c.buf
-
-		var b Batch
-		for _, e := range buf {
-			b = append(b, &e.Event)
-		}
-		last := buf[len(buf)-1]
-
-		err := c.consume(c.ctx, c.fate, b)
-		if err != nil {
-			log.Error(c.ctx, errors.Wrap(err, "batch consumer error"))
-			c.err = err
-		} else if err = last.Ack(c.ctx); err != nil {
-			log.Error(c.ctx, errors.Wrap(err, "batch ack error"))
-			c.err = err
-		} else {
-			c.buf = nil
-			c.start = time.Time{}
-			batchConsumerBufferLength.WithLabelValues(c.name).Set(0)
-		}
-
-		c.mu.Unlock()
-	}
 }
 
 // NewBatchConsumer returns a new BatchConsumer. Either batchPeriod or batchLen
@@ -173,7 +217,6 @@ func NewBatchConsumer(name string, cstore reflex.CursorStore,
 
 	bc := &BatchConsumer{
 		consume:     consume,
-		trigger:     make(chan struct{}, 1),
 		flushPeriod: batchPeriod,
 		flushLen:    batchLen,
 	}
@@ -190,19 +233,5 @@ func NewBatchConsumer(name string, cstore reflex.CursorStore,
 // NewBatchSpec returns a reflex spec for the AckConsumer.
 func NewBatchSpec(stream reflex.StreamFunc, bc *BatchConsumer,
 	opts ...reflex.StreamOption) reflex.Spec {
-
-	c := &resetConsumer{
-		Consumer: reflex.NewConsumer(bc.name, bc.Consume, bc.opts...),
-		reset:    bc.Reset,
-	}
-	return reflex.NewSpec(stream, &noSetStore{bc.cstore}, c, opts...)
-}
-
-type resetConsumer struct {
-	reflex.Consumer
-	reset func() error
-}
-
-func (r *resetConsumer) Reset() error {
-	return r.reset()
+	return reflex.NewSpec(stream, &noSetStore{bc.cstore}, bc, opts...)
 }
