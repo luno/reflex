@@ -233,5 +233,26 @@ func NewBatchConsumer(name string, cstore reflex.CursorStore,
 // NewBatchSpec returns a reflex spec for the AckConsumer.
 func NewBatchSpec(stream reflex.StreamFunc, bc *BatchConsumer,
 	opts ...reflex.StreamOption) reflex.Spec {
-	return reflex.NewSpec(stream, &noSetStore{bc.cstore}, bc, opts...)
+
+	c := &resetConsumer{
+		Consumer: reflex.NewConsumer(bc.name, bc.Consume, bc.opts...),
+		reset:    bc.Reset,
+		stop:     bc.Stop,
+	}
+
+	return reflex.NewSpec(stream, &noSetStore{bc.cstore}, c, opts...)
+}
+
+type resetConsumer struct {
+	reflex.Consumer
+	reset func(ctx context.Context) error
+	stop  func() error
+}
+
+func (r *resetConsumer) Reset(ctx context.Context) error {
+	return r.reset(ctx)
+}
+
+func (r *resetConsumer) Stop() error {
+	return r.stop()
 }
