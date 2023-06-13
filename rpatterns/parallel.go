@@ -79,7 +79,7 @@ type eventKeyFn func(event *reflex.Event) ([]byte, error)
 
 // EventFilter takes a reflex.Event and returns true if it should be allowed to be processed or
 // false if it shouldn't. It can error if it fails to determine if the event should be processed.
-type EventFilter func(event *reflex.Event) (bool, error)
+type EventFilter reflex.EventFilter
 
 func filterOnHash(m, n int, keyFn eventKeyFn) EventFilter {
 	hsh := fnv.New32()
