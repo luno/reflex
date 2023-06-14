@@ -27,6 +27,7 @@ type consumer struct {
 	latencyHist        prometheus.Observer
 	filterIncludeTypes []EventType
 	activityKey        string
+	filterEvent        EventFilter
 }
 
 // ConsumerOption will change the behaviour of the consumer
@@ -76,6 +77,14 @@ func WithoutConsumerActivityTTL() ConsumerOption {
 func WithFilterIncludeTypes(evts ...EventType) ConsumerOption {
 	return func(c *consumer) {
 		c.filterIncludeTypes = evts
+	}
+}
+
+// WithEventFilter provides an option to specify which Event values a consumer is interested in.
+// For uninteresting events Consume is never called, and a skipped metric is incremented.
+func WithEventFilter(flt EventFilter) ConsumerOption {
+	return func(c *consumer) {
+		c.filterEvent = flt
 	}
 }
 
@@ -131,8 +140,11 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 		ctx = tracing.Inject(ctx, event.Trace)
 	}
 
-	var err error
-	if len(c.filterIncludeTypes) == 0 || IsAnyType(event.Type, c.filterIncludeTypes...) {
+	ok, err := c.filter(event)
+	if err != nil {
+		c.errorCounter.Inc()
+		err = asFilterErr(err)
+	} else if ok {
 		err = c.fn(ctx, ft, event)
 		if err != nil && !IsExpected(err) {
 			c.errorCounter.Inc()
@@ -145,6 +157,17 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 	}
 
 	return err
+}
+
+func (c *consumer) filter(event *Event) (bool, error) {
+	ok := len(c.filterIncludeTypes) == 0 || IsAnyType(event.Type, c.filterIncludeTypes...)
+	if !ok {
+		return false, nil
+	}
+	if c.filterEvent != nil {
+		return c.filterEvent(event)
+	}
+	return true, nil
 }
 
 // Reset the consumer, create metrics ready for Consume

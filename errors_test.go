@@ -59,3 +59,63 @@ func TestIsExpected(t *testing.T) {
 		})
 	}
 }
+
+func TestIsFilterErr(t *testing.T) {
+	tests := []struct {
+		Name     string
+		Err      error
+		Expected bool
+	}{
+		{
+			Name:     "nil",
+			Err:      nil,
+			Expected: false,
+		}, {
+			Name:     "fate",
+			Err:      fate.ErrTempt,
+			Expected: false,
+		}, {
+			Name:     "context.Canceled",
+			Err:      context.Canceled,
+			Expected: false,
+		}, {
+			Name:     "context.DeadlineExceeded",
+			Err:      context.DeadlineExceeded,
+			Expected: false,
+		}, {
+			Name:     "ErrStopped",
+			Err:      ErrStopped,
+			Expected: false,
+		}, {
+			Name:     "Canceled status",
+			Err:      status.FromContextError(context.Canceled).Err(),
+			Expected: false,
+		},
+		{
+			Name:     "DeadlineExceeded status",
+			Err:      status.FromContextError(context.DeadlineExceeded).Err(),
+			Expected: false,
+		},
+		{
+			Name:     "not me",
+			Err:      errors.New("not me"),
+			Expected: false,
+		},
+		{
+			Name:     "filter error",
+			Err:      filterErr,
+			Expected: true,
+		},
+		{
+			Name:     "wrapped filter error",
+			Err:      asFilterErr(errors.New("not me")),
+			Expected: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			require.Equal(t, test.Expected, IsFilterErr(test.Err))
+		})
+	}
+}

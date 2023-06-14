@@ -10,6 +10,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	filterErrMsg = "error in filter"
+)
+
 var (
 	// ErrStopped is returned when an events table is stopped, usually
 	// when the grpc server is stopped. Clients should check for this error
@@ -22,6 +26,8 @@ var (
 
 	cancelProto   = status.FromContextError(context.Canceled).Proto()
 	deadlineProto = status.FromContextError(context.DeadlineExceeded).Proto()
+
+	filterErr = errors.New(filterErrMsg)
 )
 
 // IsStoppedErr checks whether err is an ErrStopped
@@ -47,4 +53,13 @@ func IsExpected(err error) bool {
 	}
 
 	return false
+}
+
+// IsFilterErr returns true if the error occurred during Event filtering operations.
+func IsFilterErr(err error) bool {
+	return errors.Is(err, filterErr)
+}
+
+func asFilterErr(err error) error {
+	return errors.Wrap(err, filterErrMsg)
 }

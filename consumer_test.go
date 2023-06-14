@@ -203,6 +203,7 @@ func TestConsumeWithSkip(t *testing.T) {
 		expConsumeCount int
 		expMetricCount  int
 		expSkipCount    float64
+		errs            []error
 	}{
 		{
 			name:            "no include filter provided",
@@ -219,11 +220,49 @@ func TestConsumeWithSkip(t *testing.T) {
 			expSkipCount:    0,
 		},
 		{
+			name:            "nill event filter provided",
+			c:               NewConsumer(consumerName, cFn, WithEventFilter(nil)),
+			expConsumeCount: 3,
+			expMetricCount:  0,
+			expSkipCount:    0,
+		},
+		{
 			name:            "include filter provided",
 			c:               NewConsumer(consumerName, cFn, WithFilterIncludeTypes(eventType(1), eventType(2))),
 			expConsumeCount: 2,
 			expMetricCount:  1,
 			expSkipCount:    1,
+		},
+		{
+			name: "event filter provided",
+			c: NewConsumer(consumerName, cFn, WithEventFilter(func(e *Event) (bool, error) {
+				return e.ID == "1" || e.ID == "2", nil
+			})),
+			expConsumeCount: 2,
+			expMetricCount:  1,
+			expSkipCount:    1,
+		},
+		{
+			name: "include filter and event filter provided",
+			c: NewConsumer(consumerName, cFn, WithFilterIncludeTypes(eventType(1), eventType(2)), WithEventFilter(func(e *Event) (bool, error) {
+				return e.ID == "1", nil
+			})),
+			expConsumeCount: 1,
+			expMetricCount:  1,
+			expSkipCount:    2,
+		},
+		{
+			name: "include filter and event filter errors",
+			c: NewConsumer(consumerName, cFn, WithFilterIncludeTypes(eventType(1), eventType(2)), WithEventFilter(func(e *Event) (bool, error) {
+				if e.ID == "1" {
+					return false, errors.New("something failed")
+				}
+				return true, nil
+			})),
+			expConsumeCount: 1,
+			expMetricCount:  1,
+			expSkipCount:    1,
+			errs:            []error{filterErr, nil, nil},
 		},
 	}
 
@@ -232,9 +271,13 @@ func TestConsumeWithSkip(t *testing.T) {
 			metrics.ConsumerSkippedEvents.Reset()
 			*consumedCounter = 0
 
-			for _, ev := range evts {
+			for i, ev := range evts {
 				err := tc.c.Consume(ctx, f, ev)
-				jtest.RequireNil(t, err)
+				if tc.errs == nil {
+					jtest.RequireNil(t, err)
+				} else {
+					jtest.Require(t, tc.errs[i], err)
+				}
 			}
 
 			require.Equal(t, tc.expConsumeCount, *consumedCounter)
