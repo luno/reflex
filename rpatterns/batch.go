@@ -2,11 +2,13 @@ package rpatterns
 
 import (
 	"context"
-	"github.com/luno/jettison/errors"
-	"github.com/luno/jettison/log"
 	"time"
 
 	"github.com/luno/fate"
+	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/j"
+	"github.com/luno/jettison/log"
+
 	"github.com/luno/reflex"
 )
 
@@ -22,7 +24,7 @@ type batchEvent struct {
 
 const minWait = time.Millisecond * 100
 
-var ErrBatchState = errors.New("batch error state")
+var ErrBatchState = errors.New("batch error state", j.C("ERR_b3053f5f1a3ecd23"))
 
 // BatchConsumer provides a reflex consumer that buffers events
 // and flushes a batch to the consume function when either
@@ -128,7 +130,8 @@ func processEvents(
 	flushPeriod time.Duration,
 	flushLen int,
 
-	fnConsume BatchConsumeFn) {
+	fnConsume BatchConsumeFn,
+) {
 	var (
 		batch      []*AckEvent
 		flushTimer <-chan time.Time
@@ -213,12 +216,17 @@ func processBatch(ctx context.Context, f fate.Fate, batch []*AckEvent, fnConsume
 func NewBatchConsumer(name string, cstore reflex.CursorStore,
 	consume func(context.Context, fate.Fate, Batch) error,
 	batchPeriod time.Duration, batchLen int,
-	opts ...reflex.ConsumerOption) *BatchConsumer {
-
+	opts ...reflex.ConsumerOption,
+) *BatchConsumer {
+	exit := make(chan any)
+	close(exit)
 	bc := &BatchConsumer{
 		consume:     consume,
 		flushPeriod: batchPeriod,
 		flushLen:    batchLen,
+		// Setup functions so that Stop works without a Reset
+		chExit: exit,
+		cancel: func() {},
 	}
 
 	fn := func(ctx context.Context, f fate.Fate, e *AckEvent) error {
@@ -231,9 +239,11 @@ func NewBatchConsumer(name string, cstore reflex.CursorStore,
 }
 
 // NewBatchSpec returns a reflex spec for the AckConsumer.
-func NewBatchSpec(stream reflex.StreamFunc, bc *BatchConsumer,
-	opts ...reflex.StreamOption) reflex.Spec {
-
+func NewBatchSpec(
+	stream reflex.StreamFunc,
+	bc *BatchConsumer,
+	opts ...reflex.StreamOption,
+) reflex.Spec {
 	c := &resetConsumer{
 		Consumer: reflex.NewConsumer(bc.name, bc.Consume, bc.opts...),
 		reset:    bc.Reset,

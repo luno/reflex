@@ -416,6 +416,7 @@ func TestBatchPeriod(t *testing.T) {
 func TestBatchErrorState(t *testing.T) {
 	ctx := context.Background()
 
+	var tMu sync.Mutex
 	processTracker := make(map[int64]bool)
 
 	// Ensure events are processed one-by-one for testing purposes
@@ -445,6 +446,8 @@ func TestBatchErrorState(t *testing.T) {
 				returnError = false
 				return someError
 			} else {
+				tMu.Lock()
+				defer tMu.Unlock()
 				for _, b := range batch {
 					_, ok := processTracker[b.IDInt()]
 					assert.False(t, ok, "event id already processed", b.ID)
@@ -495,9 +498,31 @@ func TestBatchErrorState(t *testing.T) {
 	}
 
 	for idx := 1; idx <= events.Max; idx++ {
+		tMu.Lock()
 		_, ok := processTracker[int64(idx)]
+		tMu.Unlock()
 		if !ok {
 			assert.Equal(t, true, ok, fmt.Sprintf("event id %d not processed", idx))
 		}
 	}
+}
+
+func TestNewBatchConsumerCanStop(t *testing.T) {
+	b := new(bootstrapMock)
+	f := func(ctx context.Context, f fate.Fate, b rpatterns.Batch) error {
+		return nil
+	}
+
+	consumer := rpatterns.NewBatchConsumer("", b, f, 0, 0)
+	err := consumer.Stop()
+	jtest.RequireNil(t, err)
+
+	err = consumer.Stop()
+	jtest.RequireNil(t, err)
+
+	err = consumer.Reset(context.Background())
+	jtest.RequireNil(t, err)
+
+	err = consumer.Stop()
+	jtest.RequireNil(t, err)
 }
