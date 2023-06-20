@@ -1,7 +1,8 @@
-package reflex
+package filters
 
 import (
 	"errors"
+	"github.com/luno/reflex"
 	"testing"
 
 	"github.com/luno/jettison/jtest"
@@ -12,26 +13,26 @@ var err1 = errors.New("error 1")
 var err2 = errors.New("error 2")
 var err3 = errors.New("error 3")
 
-func trueFilter(err error) EventFilter {
-	return func(event *Event) (bool, error) {
+func trueFilter(err error) reflex.EventFilter {
+	return func(event *reflex.Event) (bool, error) {
 		return true, err
 	}
 }
 
-func falseFilter(err error) EventFilter {
-	return func(event *Event) (bool, error) {
+func falseFilter(err error) reflex.EventFilter {
+	return func(event *reflex.Event) (bool, error) {
 		return false, err
 	}
 }
 
-func filters(efs ...EventFilter) []EventFilter {
+func filters(efs ...reflex.EventFilter) []reflex.EventFilter {
 	return efs
 }
 
 func TestAllEventFilters(t *testing.T) {
 	tests := []struct {
 		name string
-		efs  []EventFilter
+		efs  []reflex.EventFilter
 		ok   bool
 		err  error
 	}{
@@ -82,7 +83,7 @@ func TestAllEventFilters(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			evt := &Event{}
+			evt := &reflex.Event{}
 			ok, err := AllEventFilters(tt.efs...)(evt)
 			if tt.err == nil {
 				jtest.RequireNil(t, err)
@@ -97,7 +98,7 @@ func TestAllEventFilters(t *testing.T) {
 func TestAnyEventFilters(t *testing.T) {
 	tests := []struct {
 		name string
-		efs  []EventFilter
+		efs  []reflex.EventFilter
 		ok   bool
 		err  error
 	}{
@@ -156,7 +157,7 @@ func TestAnyEventFilters(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			evt := &Event{}
+			evt := &reflex.Event{}
 			ok, err := AnyEventFilters(tt.efs...)(evt)
 			if tt.err == nil {
 				jtest.RequireNil(t, err)
