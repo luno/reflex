@@ -1,13 +1,13 @@
 module github.com/luno/reflex
 
-go 1.19
+go 1.20
 
 require (
 	github.com/aws/aws-sdk-go v1.44.284
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/golang/protobuf v1.5.3
 	github.com/luno/fate v0.0.0-20191017091315-567fa9070f1c
-	github.com/luno/jettison v0.0.0-20200605102849-c5d1ad291332
+	github.com/luno/jettison v0.0.0-20230718160357-e090ef1681b1
 	github.com/prometheus/client_golang v1.15.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/stretchr/testify v1.8.3
@@ -56,7 +56,6 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	golang.org/x/exp/errors v0.0.0-20220706164943-b4a6d9510983 // indirect
 	golang.org/x/sys v0.9.0 // indirect
 	golang.org/x/text v0.10.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect

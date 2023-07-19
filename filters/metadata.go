@@ -1,9 +1,9 @@
 package filters
 
 import (
-	"github.com/luno/jettison"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
+
 	"github.com/luno/reflex"
 )
 
@@ -17,8 +17,10 @@ const (
 	metadataEventFilterErrMsg = "cannot make a MetadataEventFilter from a nil Deserializer or DataFilter"
 )
 
-var metadataEventFilterErr = errors.New(metadataEventFilterErrMsg)
-var deserializationErr = errors.New(deserializationErrMsg)
+var (
+	metadataEventFilterErr = errors.New(metadataEventFilterErrMsg)
+	deserializationErr     = errors.New(deserializationErrMsg)
+)
 
 func MetadataEventFilter[T any](ds Deserializer[T], flt DataFilter[T]) (reflex.EventFilter, error) {
 	if ds == nil || flt == nil {
@@ -51,6 +53,6 @@ func IsMetadataEventFilterErr(err error) bool {
 	return errors.Is(err, metadataEventFilterErr)
 }
 
-func makeMetadataEventFilterErr(ol ...jettison.Option) error {
+func makeMetadataEventFilterErr(ol ...errors.Option) error {
 	return errors.New(metadataEventFilterErrMsg, ol...)
 }

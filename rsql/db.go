@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/luno/jettison"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/internal/tracing"
 )
@@ -34,8 +34,8 @@ func (t eventType) ReflexType() int {
 // makeDefaultInserter returns the default sql inserter configured via WithEventsXField options.
 func makeDefaultInserter(schema etableSchema) inserter {
 	return func(ctx context.Context, tx *sql.Tx,
-		foreignID string, typ reflex.EventType, metadata []byte) error {
-
+		foreignID string, typ reflex.EventType, metadata []byte,
+	) error {
 		q := "insert into " + schema.name +
 			" set " + schema.foreignIDField + "=?, " + schema.timeField + "=now(6), " + schema.typeField + "=?"
 		args := []interface{}{foreignID, typ.ReflexType()}
@@ -92,8 +92,8 @@ func getLatestID(ctx context.Context, dbc *sql.DB, schema etableSchema) (int64, 
 }
 
 func getNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
-	after int64, lag time.Duration) ([]*reflex.Event, error) {
-
+	after int64, lag time.Duration,
+) ([]*reflex.Event, error) {
 	var (
 		q    string
 		args []interface{}
@@ -211,8 +211,9 @@ func getCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema, id string)
 // setCursor sets the processor's last successfully processed event ID to
 // `id`.
 func setCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema,
-	id string, cursor string) error {
-	opts := []jettison.Option{j.KS("consumer", id), j.KS("cursor", cursor)}
+	id string, cursor string,
+) error {
+	opts := []errors.Option{j.KS("consumer", id), j.KS("cursor", cursor)}
 
 	// 😱: mysql uses "numerical" comparison if you compare a db string to an int.
 	c, err := schema.cursorType.Cast(cursor)
