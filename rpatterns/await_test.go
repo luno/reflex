@@ -7,14 +7,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rpatterns"
-	"github.com/stretchr/testify/assert"
 )
 
 type testEventType int
 
 func (t testEventType) ReflexType() int {
+	return int(t)
+}
+
+type anotherTestEventType int
+
+func (t anotherTestEventType) ReflexType() int {
 	return int(t)
 }
 
@@ -137,15 +144,17 @@ func (s *streamer) Recv() (*reflex.Event, error) {
 	ei := s.events[s.i]
 	e := &reflex.Event{
 		ID:        strconv.Itoa(ei),
-		Type:      testEventType(ei),
+		Type:      anotherTestEventType(ei),
 		ForeignID: strconv.Itoa(ei),
 	}
 	s.i++
 	return e, nil
 }
 
-func (s *streamer) Stream(ctx context.Context, after string,
-	options ...reflex.StreamOption) (reflex.StreamClient, error) {
+func (s *streamer) Stream(
+	ctx context.Context, after string,
+	options ...reflex.StreamOption,
+) (reflex.StreamClient, error) {
 	return s, nil
 }
 

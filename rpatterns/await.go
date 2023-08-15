@@ -15,9 +15,10 @@ import (
 // This function can be used to wait for some state that is associated with an
 // event. pollFn is used to periodically query the state, while this logic waits for
 // a new event. It is done in parallel to mitigate race conditions.
-func Await(in context.Context, stream reflex.StreamFunc, pollFn func() (bool, error),
-	foreignID string, eventTypes ...reflex.EventType) error {
-
+func Await(
+	in context.Context, stream reflex.StreamFunc, pollFn func() (bool, error),
+	foreignID string, eventTypes ...reflex.EventType,
+) error {
 	// Ensure both go routines exit
 	ctx, cancel := context.WithCancel(in)
 	defer cancel()
@@ -40,10 +41,8 @@ func Await(in context.Context, stream reflex.StreamFunc, pollFn func() (bool, er
 			if e.ForeignID != foreignID {
 				continue
 			}
-			for _, et := range eventTypes {
-				if et == e.Type {
-					return nil
-				}
+			if reflex.IsAnyType(e.Type, eventTypes...) {
+				return nil
 			}
 		}
 	}
