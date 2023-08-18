@@ -18,7 +18,8 @@ import (
 
 // NewServer starts and returns a reflex server and its address.
 func NewServer(_ testing.TB, stream reflex.StreamFunc,
-	cstore reflex.CursorStore) (*Server, string) {
+	cstore reflex.CursorStore,
+) (*Server, string) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		panic(fmt.Sprintf("net.Listen error: %v", err))
@@ -62,8 +63,8 @@ type Server struct {
 
 // Stream creates a new stream
 func (srv *Server) Stream(req *reflexpb.StreamRequest,
-	ss reflexpb.Reflex_StreamServer) error {
-
+	ss reflexpb.Reflex_StreamServer,
+) error {
 	return srv.rserver.Stream(srv.stream, req, &counter{ss, srv.sentCounter})
 }
 

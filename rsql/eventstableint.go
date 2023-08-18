@@ -20,16 +20,16 @@ type EventsTableInt struct {
 
 // Insert works as EventsTable.Insert except that foreign id is an int64.
 func (e *EventsTableInt) Insert(ctx context.Context, tx *sql.Tx, foreignID int64,
-	typ reflex.EventType) (NotifyFunc, error) {
-
+	typ reflex.EventType,
+) (NotifyFunc, error) {
 	return e.EventsTable.Insert(ctx, tx, strconv.FormatInt(foreignID, 10), typ)
 }
 
 // InsertWithMetadata works as EventsTable.InsertWithMetadata except
 // that foreign id is an int64.
 func (e *EventsTableInt) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreignID int64,
-	typ reflex.EventType, metadata []byte) (NotifyFunc, error) {
-
+	typ reflex.EventType, metadata []byte,
+) (NotifyFunc, error) {
 	return e.EventsTable.InsertWithMetadata(ctx, tx,
 		strconv.FormatInt(foreignID, 10), typ, metadata)
 }

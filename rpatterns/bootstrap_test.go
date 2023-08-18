@@ -16,8 +16,10 @@ import (
 	"github.com/luno/reflex/rpatterns"
 )
 
-var errCursor = errors.New("no more cursors", j.C("ERR_547c6f344dce327a"))
-var errEvents = errors.New("no more events", j.C("ERR_a3eac05795da49d2"))
+var (
+	errCursor = errors.New("no more cursors", j.C("ERR_547c6f344dce327a"))
+	errEvents = errors.New("no more events", j.C("ERR_a3eac05795da49d2"))
+)
 
 func TestBootstrap(t *testing.T) {
 	cases := []struct {
@@ -68,7 +70,6 @@ func TestBootstrap(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-
 			var results []*reflex.Event
 			consumer := reflex.NewConsumer("test",
 				func(ctx context.Context, f fate.Fate, e *reflex.Event) error {

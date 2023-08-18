@@ -206,14 +206,16 @@ type EventsTable struct {
 //	defer notify()
 //	return doWorkAndCommit(tx)
 func (t *EventsTable) Insert(ctx context.Context, tx *sql.Tx, foreignID string,
-	typ reflex.EventType) (NotifyFunc, error) {
+	typ reflex.EventType,
+) (NotifyFunc, error) {
 	return t.InsertWithMetadata(ctx, tx, foreignID, typ, nil)
 }
 
 // InsertWithMetadata inserts an event with metadata into the EventsTable.
 // Note metadata is disabled by default, enable with WithEventMetadataField option.
 func (t *EventsTable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreignID string,
-	typ reflex.EventType, metadata []byte) (NotifyFunc, error) {
+	typ reflex.EventType, metadata []byte,
+) (NotifyFunc, error) {
 	if isNoop(foreignID, typ) {
 		return nil, errors.New("inserting invalid noop event")
 	}
@@ -237,8 +239,8 @@ func (t *EventsTable) Clone(opts ...EventsOption) *EventsTable {
 // Stream implements reflex.StreamFunc and returns a StreamClient that
 // streams events from the db. It is only safe for a single goroutine to use.
 func (t *EventsTable) Stream(ctx context.Context, dbc *sql.DB, after string,
-	opts ...reflex.StreamOption) reflex.StreamClient {
-
+	opts ...reflex.StreamOption,
+) reflex.StreamClient {
 	sc := &streamclient{
 		schema:  t.schema,
 		after:   after,
@@ -260,7 +262,8 @@ func (t *EventsTable) Stream(ctx context.Context, dbc *sql.DB, after string,
 // ToStream returns a reflex StreamFunc interface of this EventsTable.
 func (t *EventsTable) ToStream(dbc *sql.DB, opts1 ...reflex.StreamOption) reflex.StreamFunc {
 	return func(ctx context.Context, after string,
-		opts2 ...reflex.StreamOption) (client reflex.StreamClient, e error) {
+		opts2 ...reflex.StreamOption,
+	) (client reflex.StreamClient, e error) {
 		return t.Stream(ctx, dbc, after, append(opts1, opts2...)...), nil
 	}
 }

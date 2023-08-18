@@ -93,7 +93,6 @@ func TestConsumable(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-
 			cstore := rpatterns.MemCursorStore()
 			_ = cstore.SetCursor(nil, name, strconv.Itoa(test.startCursor))
 			streamer := newMockStreamer(ItoEList(test.initEvents...), test.streamEndError)

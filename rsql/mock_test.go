@@ -57,7 +57,8 @@ type mockTable struct {
 }
 
 func (m *mockTable) Load(ctx context.Context, dbc *sql.DB, prevCursor int64,
-	lag time.Duration) ([]*reflex.Event, error) {
+	lag time.Duration,
+) ([]*reflex.Event, error) {
 	for i, e := range m.events {
 		if e.IDInt() > prevCursor {
 			return m.events[i:], nil
@@ -67,7 +68,8 @@ func (m *mockTable) Load(ctx context.Context, dbc *sql.DB, prevCursor int64,
 }
 
 func (m *mockTable) Insert(ctx context.Context, tx *sql.Tx,
-	foreignID string, typ reflex.EventType, metadata []byte) error {
+	foreignID string, typ reflex.EventType, metadata []byte,
+) error {
 	m.events = append(m.events, &reflex.Event{
 		ID:        fmt.Sprintf("%d", len(m.events)+1),
 		ForeignID: foreignID,

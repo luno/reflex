@@ -4,11 +4,12 @@ import (
 	"context"
 	"flag"
 
+	"google.golang.org/grpc"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/example/exserver"
 	"github.com/luno/reflex/example/exserver/exserverpb"
 	"github.com/luno/reflex/reflexpb"
-	"google.golang.org/grpc"
 )
 
 var serverAddr = flag.String("server_addr", ":1234",
@@ -33,8 +34,8 @@ func New() (exserver.Client, error) {
 }
 
 func (cl *client) StreamEvents1(ctx context.Context, after string,
-	opts ...reflex.StreamOption) (reflex.StreamClient, error) {
-
+	opts ...reflex.StreamOption,
+) (reflex.StreamClient, error) {
 	sFn := reflex.WrapStreamPB(func(ctx context.Context, req *reflexpb.StreamRequest) (reflex.StreamClientPB, error) {
 		return cl.clpb.StreamEvent1(ctx, req)
 	})
@@ -43,8 +44,8 @@ func (cl *client) StreamEvents1(ctx context.Context, after string,
 }
 
 func (cl *client) StreamEvents2(ctx context.Context, after string,
-	opts ...reflex.StreamOption) (reflex.StreamClient, error) {
-
+	opts ...reflex.StreamOption,
+) (reflex.StreamClient, error) {
 	sFn := reflex.WrapStreamPB(func(ctx context.Context, req *reflexpb.StreamRequest) (reflex.StreamClientPB, error) {
 		return cl.clpb.StreamEvent2(ctx, req)
 	})

@@ -54,7 +54,8 @@ func (c *AckConsumer) Consume(ctx context.Context, f fate.Fate, e *reflex.Event)
 // NewAckConsumer returns a new AckConsumer.
 func NewAckConsumer(name string, cstore reflex.CursorStore,
 	consume func(context.Context, fate.Fate, *AckEvent) error,
-	opts ...reflex.ConsumerOption) *AckConsumer {
+	opts ...reflex.ConsumerOption,
+) *AckConsumer {
 	return &AckConsumer{
 		name:    name,
 		cstore:  cstore,
@@ -65,8 +66,8 @@ func NewAckConsumer(name string, cstore reflex.CursorStore,
 
 // NewAckSpec returns a reflex spec for the AckConsumer.
 func NewAckSpec(stream reflex.StreamFunc, ac *AckConsumer,
-	opts ...reflex.StreamOption) reflex.Spec {
-
+	opts ...reflex.StreamOption,
+) reflex.Spec {
 	c := reflex.NewConsumer(ac.name, ac.Consume, ac.opts...)
 	return reflex.NewSpec(stream, &noSetStore{ac.cstore}, c, opts...)
 }

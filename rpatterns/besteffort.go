@@ -7,6 +7,7 @@ import (
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/log"
+
 	"github.com/luno/reflex"
 )
 
@@ -14,8 +15,8 @@ import (
 // after the provided number of retries and therefore eventually
 // continues to the next event.
 func NewBestEffortConsumer(name string, retries int, fn func(context.Context, fate.Fate, *reflex.Event) error,
-	opts ...reflex.ConsumerOption) reflex.Consumer {
-
+	opts ...reflex.ConsumerOption,
+) reflex.Consumer {
 	be := &bestEffort{
 		inner:   fn,
 		retries: retries,

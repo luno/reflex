@@ -15,7 +15,6 @@ import (
 // ConsumeLocalStreamForever connects to the local server and prints out each event
 func ConsumeLocalStreamForever(dbc *sql.DB) {
 	f := func(ctx context.Context, fate fate.Fate, event *exserver.ExEvent) error {
-
 		typ := exserver.ExEventType(event.Type.ReflexType())
 		log.Printf("ops: consuming event %s of type %v", event.ID, typ)
 

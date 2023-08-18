@@ -49,7 +49,6 @@ func Test_optsToProto(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-
 			pb, err := optsToProto(test.Input)
 			require.NoError(t, err)
 
@@ -65,5 +64,4 @@ func Test_optsToProto(t *testing.T) {
 			require.Equal(t, test.Output, res)
 		})
 	}
-
 }

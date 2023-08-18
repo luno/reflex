@@ -42,7 +42,8 @@ func (b *bootstrapper) Flush(ctx context.Context) error {
 // from head if no cursor is found. This is useful if old events should be skipped
 // for new consumers. Once running (bootstrapped), one can safely revert to reflex.NewSpec.
 func NewBootstrapSpec(stream reflex.StreamFunc, cstore reflex.CursorStore,
-	consumer reflex.Consumer, opts ...reflex.StreamOption) reflex.Spec {
+	consumer reflex.Consumer, opts ...reflex.StreamOption,
+) reflex.Spec {
 	b := &bootstrapper{
 		stream: stream,
 		cstore: cstore,
@@ -56,7 +57,8 @@ func NewBootstrapSpec(stream reflex.StreamFunc, cstore reflex.CursorStore,
 // for new consumers. Once running (bootstrapped), one can safely revert to reflex.NewConsumable.
 // Deprecated: Use NewBootstrapSpec.
 func NewBootstrapConsumable(sFn reflex.StreamFunc, cstore reflex.CursorStore,
-	opts ...reflex.StreamOption) reflex.Consumable {
+	opts ...reflex.StreamOption,
+) reflex.Consumable {
 	b := &bootstrapper{
 		stream: sFn,
 		cstore: cstore,

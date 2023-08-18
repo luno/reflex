@@ -46,8 +46,8 @@ type Poller struct {
 // Stream is safe to call from multiple goroutines, but the returned
 // StreamClient is only safe for a single goroutine to use.
 func (p Poller) Stream(ctx context.Context, after string,
-	opts ...reflex.StreamOption) (reflex.StreamClient, error) {
-
+	opts ...reflex.StreamOption,
+) (reflex.StreamClient, error) {
 	return &pollStream{
 		ctx:      ctx,
 		cursor:   after,

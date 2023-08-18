@@ -35,10 +35,11 @@ func NewClient(_ testing.TB, url string) *Client {
 
 // StreamEvents wraps a gRPC stream, feeding the events to reflex
 func (cl *Client) StreamEvents(ctx context.Context, after string,
-	opts ...reflex.StreamOption) (reflex.StreamClient, error) {
-
+	opts ...reflex.StreamOption,
+) (reflex.StreamClient, error) {
 	sFn := reflex.WrapStreamPB(func(ctx context.Context,
-		req *reflexpb.StreamRequest) (reflex.StreamClientPB, error) {
+		req *reflexpb.StreamRequest,
+	) (reflex.StreamClientPB, error) {
 		return cl.clpb.Stream(ctx, req)
 	})
 

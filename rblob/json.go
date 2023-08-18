@@ -18,7 +18,6 @@ type jsonDecoder struct {
 }
 
 func (d *jsonDecoder) Decode() ([]byte, error) {
-
 	var raw json.RawMessage
 	err := d.decoder.Decode(&raw)
 	if err != nil {

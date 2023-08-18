@@ -17,9 +17,7 @@ import (
 	"github.com/luno/reflex/rsql"
 )
 
-var (
-	dbTestURI = flag.String("db_test_uri", getDefaultURI(), "Test database uri")
-)
+var dbTestURI = flag.String("db_test_uri", getDefaultURI(), "Test database uri")
 
 const (
 	eventsTable  = "events"

@@ -2,16 +2,19 @@ package filters
 
 import (
 	"errors"
-	"github.com/luno/reflex"
 	"testing"
 
 	"github.com/luno/jettison/jtest"
 	"github.com/stretchr/testify/require"
+
+	"github.com/luno/reflex"
 )
 
-var err1 = errors.New("error 1")
-var err2 = errors.New("error 2")
-var err3 = errors.New("error 3")
+var (
+	err1 = errors.New("error 1")
+	err2 = errors.New("error 2")
+	err3 = errors.New("error 3")
+)
 
 func trueFilter(err error) reflex.EventFilter {
 	return func(event *reflex.Event) (bool, error) {

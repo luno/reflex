@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rsql"
-	"github.com/stretchr/testify/assert"
 )
 
 type testEventType int
@@ -35,7 +36,8 @@ func insertTestEvent(dbc *sql.DB, table *rsql.EventsTable, foreignID string, typ
 }
 
 func insertTestEventMeta(dbc *sql.DB, table *rsql.EventsTable, foreignID string,
-	typ reflex.EventType, metadata []byte) error {
+	typ reflex.EventType, metadata []byte,
+) error {
 	tx, err := dbc.Begin()
 	if err != nil {
 		return err

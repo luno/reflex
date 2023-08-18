@@ -14,8 +14,9 @@ import (
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/log"
-	"github.com/luno/reflex"
 	"gocloud.dev/blob"
+
+	"github.com/luno/reflex"
 )
 
 // Decoder decodes a blob into event byte slices (usually DTOs) which
@@ -55,8 +56,8 @@ type Option func(*Bucket)
 // on supported URL formats. Also see https://gocloud.dev/concepts/urls/
 // and https://gocloud.dev/howto/blob/.
 func OpenBucket(ctx context.Context, label, urlstr string,
-	opts ...Option) (*Bucket, error) {
-
+	opts ...Option,
+) (*Bucket, error) {
 	u, err := url.Parse(urlstr)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse url string")
@@ -77,7 +78,6 @@ func OpenBucket(ctx context.Context, label, urlstr string,
 
 // NewBucket returns a bucket using the provided underlying bucket.
 func NewBucket(label string, bucket *blob.Bucket, opts ...Option) *Bucket {
-
 	b := &Bucket{
 		label:       label,
 		bucket:      bucket,
@@ -118,8 +118,8 @@ func (b *Bucket) Close() error {
 // Close method which releases underlying resources. Close is
 // called internally when Recv returns an error.
 func (b *Bucket) Stream(ctx context.Context, after string,
-	opts ...reflex.StreamOption) (reflex.StreamClient, error) {
-
+	opts ...reflex.StreamOption,
+) (reflex.StreamClient, error) {
 	if len(opts) > 0 {
 		return nil, errors.New("options not supported yet")
 	}

@@ -21,8 +21,10 @@ import (
 	"github.com/luno/reflex/internal/tracing"
 )
 
-type stream int64
-type sType int
+type (
+	stream int64
+	sType  int
+)
 
 func (i sType) ReflexType() int { return int(i) }
 
@@ -156,7 +158,6 @@ func TestPassTraceIntoConsumerContext(t *testing.T) {
 
 		c := NewConsumer("test",
 			func(ctx context.Context, f fate.Fate, e *Event) error {
-
 				span := trace.SpanFromContext(ctx)
 				require.Equal(t, expectedSpanCtx.TraceID().String(), span.SpanContext().TraceID().String())
 				require.Equal(t, expectedSpanCtx.TraceState().String(), span.SpanContext().TraceState().String())

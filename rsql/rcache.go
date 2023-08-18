@@ -60,8 +60,8 @@ func (c *rcache) tailUnsafe() int64 {
 }
 
 func (c *rcache) Load(ctx context.Context, dbc *sql.DB,
-	prev int64, lag time.Duration) ([]*reflex.Event, error) {
-
+	prev int64, lag time.Duration,
+) ([]*reflex.Event, error) {
 	if res, ok := c.maybeHit(prev+1, lag); ok {
 		rcacheHitsCounter.WithLabelValues(c.name).Inc()
 		return res, nil
@@ -106,7 +106,8 @@ func (c *rcache) maybeHitUnsafe(from int64, lag time.Duration) ([]*reflex.Event,
 
 // readThrough returns the next events from the DB as well as updating the cache.
 func (c *rcache) readThrough(ctx context.Context, dbc *sql.DB,
-	prev int64, lag time.Duration) ([]*reflex.Event, error) {
+	prev int64, lag time.Duration,
+) ([]*reflex.Event, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

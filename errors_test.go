@@ -20,23 +20,28 @@ func TestIsExpected(t *testing.T) {
 			Name:     "nil",
 			Err:      nil,
 			Expected: false,
-		}, {
+		},
+		{
 			Name:     "fate",
 			Err:      fate.ErrTempt,
 			Expected: true,
-		}, {
+		},
+		{
 			Name:     "context.Canceled",
 			Err:      context.Canceled,
 			Expected: true,
-		}, {
+		},
+		{
 			Name:     "context.DeadlineExceeded",
 			Err:      context.DeadlineExceeded,
 			Expected: true,
-		}, {
+		},
+		{
 			Name:     "ErrStopped",
 			Err:      ErrStopped,
 			Expected: true,
-		}, {
+		},
+		{
 			Name:     "Canceled status",
 			Err:      status.FromContextError(context.Canceled).Err(),
 			Expected: true,
@@ -70,23 +75,28 @@ func TestIsFilterErr(t *testing.T) {
 			Name:     "nil",
 			Err:      nil,
 			Expected: false,
-		}, {
+		},
+		{
 			Name:     "fate",
 			Err:      fate.ErrTempt,
 			Expected: false,
-		}, {
+		},
+		{
 			Name:     "context.Canceled",
 			Err:      context.Canceled,
 			Expected: false,
-		}, {
+		},
+		{
 			Name:     "context.DeadlineExceeded",
 			Err:      context.DeadlineExceeded,
 			Expected: false,
-		}, {
+		},
+		{
 			Name:     "ErrStopped",
 			Err:      ErrStopped,
 			Expected: false,
-		}, {
+		},
+		{
 			Name:     "Canceled status",
 			Err:      status.FromContextError(context.Canceled).Err(),
 			Expected: false,

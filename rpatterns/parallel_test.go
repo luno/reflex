@@ -205,7 +205,6 @@ type parallelStream struct {
 }
 
 func (p *parallelStream) Recv() (*reflex.Event, error) {
-
 	if len(p.events) <= p.index {
 		return nil, errEvents
 	}

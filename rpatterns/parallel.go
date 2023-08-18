@@ -58,10 +58,12 @@ func getParallelConfig(opts []ParallelOption) parallelConfig {
 }
 
 // ParallelOption configures the consumer with different behaviour
-type ParallelOption func(pc *parallelConfig)
-type getCtxFn = func(m int) context.Context
-type getConsumerFn = func(m int) reflex.Consumer
-type getAckConsumerFn = func(m int) AckConsumer
+type (
+	ParallelOption   func(pc *parallelConfig)
+	getCtxFn         = func(m int) context.Context
+	getConsumerFn    = func(m int) reflex.Consumer
+	getAckConsumerFn = func(m int) AckConsumer
+)
 
 // ConsumerShard is one of n consumers, with a formatted name and a unique EventFilter
 type ConsumerShard struct {
@@ -188,8 +190,8 @@ func ParallelSpecs(name string, n int,
 //
 // NOTE: N should preferably be a power of 2, and modifying N will reset the cursors.
 func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.StreamFunc,
-	cstore reflex.CursorStore, opts ...ParallelOption) {
-
+	cstore reflex.CursorStore, opts ...ParallelOption,
+) {
 	conf := getParallelConfig(opts)
 	for m := 0; m < n; m++ {
 		m := m

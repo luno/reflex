@@ -124,7 +124,7 @@ func TestSyncSetCursor(t *testing.T) {
 
 	s := newTestSleep()
 
-	//Clone table and disable async writes.
+	// Clone table and disable async writes.
 	ct := rsql.NewCursorsTable(
 		cursorsTable,
 		rsql.WithCursorAsyncDisabled(),

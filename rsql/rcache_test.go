@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luno/reflex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/luno/reflex"
 )
 
 var rCacheLimit = 100
@@ -59,7 +60,6 @@ func TestGap(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestRCache(t *testing.T) {
@@ -218,8 +218,8 @@ func (q *query) assertQuery(t *testing.T, lastID int64, count int) {
 }
 
 func (q *query) Load(ctx context.Context, dbc *sql.DB, prev int64,
-	lag time.Duration) ([]*reflex.Event, error) {
-
+	lag time.Duration,
+) ([]*reflex.Event, error) {
 	q.queried[prev]++
 
 	if len(q.events) <= int(prev) {

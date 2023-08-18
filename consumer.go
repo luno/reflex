@@ -11,8 +11,10 @@ import (
 	"github.com/luno/reflex/internal/tracing"
 )
 
-const defaultLagAlert = 30 * time.Minute
-const defaultActivityTTL = 24 * time.Hour
+const (
+	defaultLagAlert    = 30 * time.Minute
+	defaultActivityTTL = 24 * time.Hour
+)
 
 type consumer struct {
 	fn          func(context.Context, fate.Fate, *Event) error
@@ -90,8 +92,8 @@ func WithEventFilter(flt EventFilter) ConsumerOption {
 
 // NewConsumer returns a new instrumented consumer of events.
 func NewConsumer(name string, fn func(context.Context, fate.Fate, *Event) error,
-	opts ...ConsumerOption) Consumer {
-
+	opts ...ConsumerOption,
+) Consumer {
 	ls := metrics.Labels(name)
 
 	c := &consumer{
@@ -118,7 +120,8 @@ func (c *consumer) Name() string {
 }
 
 func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
-	event *Event) error {
+	event *Event,
+) error {
 	t0 := time.Now()
 
 	metrics.ConsumerActivityGauge.SetActive(c.activityKey)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luno/fate"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/example/exclient/db"
 	"github.com/luno/reflex/example/exserver"
@@ -34,7 +35,6 @@ func main() {
 // stores the consumer cursor locally.
 func ConsumeGRPCStreamForever(dbc *sql.DB, ec exserver.Client) {
 	f := func(ctx context.Context, fate fate.Fate, event *exserver.ExEvent) error {
-
 		typ := exserver.ExEventType(event.Type.ReflexType())
 		log.Printf("ops: consuming event %s of type %v", event.ID, typ)
 
@@ -53,5 +53,4 @@ func ConsumeGRPCStreamForever(dbc *sql.DB, ec exserver.Client) {
 		log.Printf("ops: internal_exserver_loop error: %v", err)
 		time.Sleep(time.Second * 5)
 	}
-
 }

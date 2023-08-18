@@ -1,11 +1,13 @@
 package filters
 
 import (
+	"testing"
+
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/jtest"
-	"github.com/luno/reflex"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	"github.com/luno/reflex"
 )
 
 func TestMakeMetadataEventFilter(t *testing.T) {

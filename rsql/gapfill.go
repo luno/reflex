@@ -86,8 +86,8 @@ func fillGap(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64) er
 }
 
 func exists(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64,
-	level sql.IsolationLevel) (bool, error) {
-
+	level sql.IsolationLevel,
+) (bool, error) {
 	tx, err := dbc.BeginTx(ctx, &sql.TxOptions{Isolation: level})
 	if err != nil {
 		return false, err

@@ -15,7 +15,6 @@ import (
 // feeding each into the consumer and updating the cursor on success.
 // It always returns a non-nil error. Cancel the context to return early.
 func Run(in context.Context, s Spec) error {
-
 	ctx, cancel := context.WithCancel(in)
 	defer cancel()
 	defer s.cstore.Flush(context.Background()) // best effort flush with new context

@@ -22,7 +22,8 @@ func TestParallelConsumerNames(t *testing.T) {
 		consumers []ConsumerShard
 		expNames  []string
 	}{
-		{name: "default formatter",
+		{
+			name:      "default formatter",
 			consumers: ConsumerShards("test", 10),
 			expNames: []string{
 				"test_1_of_10",
@@ -37,7 +38,8 @@ func TestParallelConsumerNames(t *testing.T) {
 				"test_10_of_10",
 			},
 		},
-		{name: "custom format",
+		{
+			name: "custom format",
 			consumers: ConsumerShards("test", 2, WithNameFormatter(func(base string, m, n int) string {
 				return fmt.Sprintf("%s/%d/%d", base, m+1, n)
 			})),
@@ -89,7 +91,8 @@ func TestParallelConsumerFilter(t *testing.T) {
 
 		expEventDistribution []string
 	}{
-		{name: "by event id",
+		{
+			name:      "by event id",
 			consumers: ConsumerShards("test", 3, WithHashOption(HashOptionEventID)),
 			events: []*reflex.Event{
 				{ID: "1"}, {ID: "2"}, {ID: "3"}, {ID: "4"}, {ID: "5"},
@@ -98,7 +101,8 @@ func TestParallelConsumerFilter(t *testing.T) {
 				"test_1_of_3", "test_3_of_3", "test_2_of_3", "test_1_of_3", "test_3_of_3",
 			},
 		},
-		{name: "by type",
+		{
+			name:      "by type",
 			consumers: ConsumerShards("test", 3, WithHashOption(HashOptionEventType)),
 			events: []*reflex.Event{
 				{ID: "1", Type: EvType(1)},
@@ -111,7 +115,8 @@ func TestParallelConsumerFilter(t *testing.T) {
 				"test_1_of_3", "test_3_of_3", "test_2_of_3", "test_1_of_3", "test_1_of_3",
 			},
 		},
-		{name: "by foreign id",
+		{
+			name:      "by foreign id",
 			consumers: ConsumerShards("test", 3, WithHashOption(HashOptionEventForeignID)),
 			events: []*reflex.Event{
 				{ID: "1", ForeignID: "100"},
@@ -124,7 +129,8 @@ func TestParallelConsumerFilter(t *testing.T) {
 				"test_1_of_3", "test_2_of_3", "test_2_of_3", "test_1_of_3", "test_1_of_3",
 			},
 		},
-		{name: "custom hash function can put all events on one consumer",
+		{
+			name: "custom hash function can put all events on one consumer",
 			consumers: ConsumerShards("test", 3, WithHashFn(func(event *reflex.Event) ([]byte, error) {
 				return []byte("Hello, World"), nil
 			})),

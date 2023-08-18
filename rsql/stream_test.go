@@ -66,7 +66,7 @@ func TestStream(t *testing.T) {
 			assert.NoError(t, err)
 
 			if test.fillBuffers {
-				//before reading anything, wait for full buffers
+				// before reading anything, wait for full buffers
 				var n int
 				waitFor(t, time.Second, func() bool {
 					n = int(s.server.SentCount())
@@ -442,7 +442,8 @@ func TestStreamLag(t *testing.T) {
 	loadCountCh := make(chan struct{}, 100)
 	var table *rsql.EventsTable
 	loader := func(ctx context.Context, dbc *sql.DB, prevCursor int64,
-		lag time.Duration) (events []*reflex.Event, err error) {
+		lag time.Duration,
+	) (events []*reflex.Event, err error) {
 		loadCountCh <- struct{}{}
 		return rsql.GetNextEventsForTesting(ctx, t, dbc, table, prevCursor, lag)
 	}
@@ -518,7 +519,8 @@ func TestStreamLagNoCache(t *testing.T) {
 	loadCountCh := make(chan struct{}, 100)
 	var table *rsql.EventsTable
 	loader := func(ctx context.Context, dbc *sql.DB, prevCursor int64,
-		lag time.Duration) (events []*reflex.Event, err error) {
+		lag time.Duration,
+	) (events []*reflex.Event, err error) {
 		loadCountCh <- struct{}{}
 		return rsql.GetNextEventsForTesting(ctx, t, dbc, table, prevCursor, lag)
 	}
@@ -615,8 +617,8 @@ type teststate struct {
 }
 
 func setupState(t *testing.T, streamOptions []reflex.StreamOption,
-	eventOptions []rsql.EventsOption, ev EventTableSchema, crs CursorTableSchema) *teststate {
-
+	eventOptions []rsql.EventsOption, ev EventTableSchema, crs CursorTableSchema,
+) *teststate {
 	dbc := ConnectTestDB(t, ev, crs)
 	etable := rsql.NewEventsTable(eventsTable, eventOptions...)
 	ctable := rsql.NewCursorsTable(cursorsTable, rsql.WithCursorAsyncPeriod(time.Minute)) // require flush

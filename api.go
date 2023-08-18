@@ -99,7 +99,8 @@ func (req Spec) Stop() error {
 
 // NewSpec returns a new Spec.
 func NewSpec(stream StreamFunc, cstore CursorStore, consumer Consumer,
-	opts ...StreamOption) Spec {
+	opts ...StreamOption,
+) Spec {
 	return Spec{
 		stream:   stream,
 		cstore:   cstore,

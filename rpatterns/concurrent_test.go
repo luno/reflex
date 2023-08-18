@@ -58,7 +58,8 @@ func TestErrorPropagatedToConsumeEventually(t *testing.T) {
 
 	theError := errors.New("error")
 
-	errorOnTwo := wrapConsume{name: "test",
+	errorOnTwo := wrapConsume{
+		name: "test",
 		consume: func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
 			if e.IDInt() == 2 {
 				return theError
@@ -98,7 +99,8 @@ func TestResetClearsError(t *testing.T) {
 	cs := MemCursorStore()
 
 	var returnNil bool
-	consumeError := wrapConsume{name: "test",
+	consumeError := wrapConsume{
+		name: "test",
 		consume: func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
 			if !returnNil {
 				return errors.New("error")

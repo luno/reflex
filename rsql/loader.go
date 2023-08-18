@@ -37,8 +37,8 @@ type filterLoader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 // This loader can be replaced with the WithBaseLoader option.
 func makeBaseLoader(schema etableSchema) loader {
 	return func(ctx context.Context, dbc *sql.DB,
-		prevCursor int64, lag time.Duration) ([]*reflex.Event, error) {
-
+		prevCursor int64, lag time.Duration,
+	) ([]*reflex.Event, error) {
 		return getNextEvents(ctx, dbc, schema, prevCursor, lag)
 	}
 }
@@ -47,8 +47,8 @@ func makeBaseLoader(schema etableSchema) loader {
 // does not have logic of its own.
 func wrapFilter(loader loader) filterLoader {
 	return func(ctx context.Context, dbc *sql.DB,
-		prev int64, lag time.Duration) ([]*reflex.Event, int64, error) {
-
+		prev int64, lag time.Duration,
+	) ([]*reflex.Event, int64, error) {
 		el, err := loader(ctx, dbc, prev, lag)
 		if err != nil {
 			return nil, 0, err
@@ -68,8 +68,8 @@ func wrapFilter(loader loader) filterLoader {
 // by loader are noops, it returns the last event id as the cursor override.
 func wrapNoopFilter(loader loader) filterLoader {
 	return func(ctx context.Context, dbc *sql.DB,
-		prev int64, lag time.Duration) ([]*reflex.Event, int64, error) {
-
+		prev int64, lag time.Duration,
+	) ([]*reflex.Event, int64, error) {
 		el, err := loader(ctx, dbc, prev, lag)
 		if err != nil {
 			return nil, 0, err
@@ -99,8 +99,8 @@ func wrapNoopFilter(loader loader) filterLoader {
 // transactions. Detected gaps are sent on the channel.
 func wrapGapDetector(loader loader, ch chan<- Gap, name string) loader {
 	return func(ctx context.Context, dbc *sql.DB, prev int64,
-		lag time.Duration) ([]*reflex.Event, error) {
-
+		lag time.Duration,
+	) ([]*reflex.Event, error) {
 		el, err := loader(ctx, dbc, prev, lag)
 		if err != nil {
 			return nil, err
