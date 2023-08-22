@@ -6,11 +6,12 @@ import (
 	"testing"
 
 	"github.com/luno/jettison/jtest"
-	"github.com/luno/reflex/internal/tracing"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/luno/reflex/internal/tracing"
 )
 
 func TestExtract(t *testing.T) {
@@ -50,7 +51,7 @@ func TestInject(t *testing.T) {
 	jtest.RequireNil(t, err)
 
 	ctx = tracing.Inject(ctx, data)
-	expected := "context.Background.WithValue(type trace.traceContextKeyType, val <not Stringer>).WithValue(type internal.contextKey, val <not Stringer>)"
+	expected := "context.Background.WithValue(type trace.traceContextKeyType, val <not Stringer>).WithValue(type log.contextKey, val <not Stringer>)"
 	require.Equal(t, expected, fmt.Sprint(ctx))
 }
 

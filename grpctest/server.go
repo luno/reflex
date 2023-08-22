@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/luno/jettison/errors"
-	"github.com/luno/jettison/interceptors"
+	grpc_jettison "github.com/luno/jettison/grpc"
 	"github.com/luno/jettison/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -26,8 +26,8 @@ func NewServer(_ testing.TB, stream reflex.StreamFunc,
 	}
 
 	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.UnaryServerInterceptor),
-		grpc.StreamInterceptor(interceptors.StreamServerInterceptor))
+		grpc.UnaryInterceptor(grpc_jettison.UnaryServerInterceptor),
+		grpc.StreamInterceptor(grpc_jettison.StreamServerInterceptor))
 
 	srv := &Server{
 		stream:      stream,

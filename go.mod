@@ -7,7 +7,7 @@ require (
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/golang/protobuf v1.5.3
 	github.com/luno/fate v0.0.0-20191017091315-567fa9070f1c
-	github.com/luno/jettison v0.0.0-20230718160357-e090ef1681b1
+	github.com/luno/jettison v0.0.0-20230821153305-965cfff8ad20
 	github.com/prometheus/client_golang v1.15.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/stretchr/testify v1.8.3
