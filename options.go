@@ -23,7 +23,7 @@ type StreamOptions struct {
 type StreamOption func(*StreamOptions)
 
 // WithStreamFromHead provides an option to stream only new events from
-// from the head of events table. Note this overrides the "after" parameter.
+// the head of events table. Note this overrides the "after" parameter.
 func WithStreamFromHead() StreamOption {
 	return func(sc *StreamOptions) {
 		sc.StreamFromHead = true

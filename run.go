@@ -73,6 +73,7 @@ func Run(in context.Context, s Spec) error {
 		}
 
 		ctx := log.ContextWith(ctx, j.MKS{
+			"consumer":  s.consumer.Name(),
 			"event_id":  e.ID,
 			"event_fid": e.ForeignID,
 		})
@@ -90,6 +91,7 @@ func Run(in context.Context, s Spec) error {
 
 		if err := s.consumer.Consume(ctx, f, e); err != nil {
 			return errors.Wrap(err, "consume error", j.MKS{
+				"consumer":  s.consumer.Name(),
 				"event_id":  e.ID,
 				"event_fid": e.ForeignID,
 			})
@@ -97,6 +99,7 @@ func Run(in context.Context, s Spec) error {
 
 		if err := s.cstore.SetCursor(ctx, s.consumer.Name(), e.ID); err != nil {
 			return errors.Wrap(err, "set cursor error", j.MKS{
+				"consumer":  s.consumer.Name(),
 				"event_id":  e.ID,
 				"event_fid": e.ForeignID,
 			})

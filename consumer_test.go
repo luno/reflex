@@ -287,3 +287,123 @@ func TestConsumeWithSkip(t *testing.T) {
 		})
 	}
 }
+
+func TestConsumeWithErrorAndReporting(t *testing.T) {
+	ctx := context.Background()
+	consumerName := "test_consumer"
+	f := fate.New()
+	consumedCounter := new(int)
+	recoveredCounter := new(int)
+	eventId := new(int)
+	cErr := errors.New("cfn errored")
+	rErr := errors.New("rfn changed error")
+	cFnErr := func(context.Context, fate.Fate, *Event) error {
+		*consumedCounter++
+		return errors.Wrap(cErr, "")
+	}
+	cFnCanc := func(context.Context, fate.Fate, *Event) error {
+		*consumedCounter++
+		return errors.Wrap(context.Canceled, "")
+	}
+	rFnNil := func(_ context.Context, _ fate.Fate, e *Event, c Consumer, err error) error {
+		*recoveredCounter++
+		*eventId, _ = strconv.Atoi(e.ID)
+		return nil
+	}
+	rFnSame := func(_ context.Context, _ fate.Fate, e *Event, c Consumer, err error) error {
+		*recoveredCounter++
+		*eventId, _ = strconv.Atoi(e.ID)
+		return err
+	}
+	rFnDiff := func(_ context.Context, _ fate.Fate, e *Event, c Consumer, err error) error {
+		*recoveredCounter++
+		*eventId, _ = strconv.Atoi(e.ID)
+		return errors.Wrap(rErr, "")
+	}
+	evts := []*Event{
+		{
+			ID:        "1",
+			Type:      eventType(1),
+			Timestamp: time.Now(),
+		},
+		{
+			ID:        "2",
+			Type:      eventType(2),
+			Timestamp: time.Now(),
+		},
+		{
+			ID:        "3",
+			Type:      eventType(3),
+			Timestamp: time.Now(),
+		},
+	}
+
+	allEventIds := []int{1, 2, 3}
+	noEventIds := []int{0, 0, 0}
+
+	tcs := []struct {
+		name                string
+		c                   Consumer
+		expConsumeCount     int
+		expRecoveredCount   int
+		expMetricErrorCount int
+		expEventIDs         []int
+		expErr              error
+	}{
+		{
+			name:                "Recover Function notes but doesn't change error",
+			c:                   NewConsumer(consumerName, cFnErr, WithRecoverFunction(rFnSame)),
+			expConsumeCount:     3,
+			expRecoveredCount:   3,
+			expMetricErrorCount: 3,
+			expEventIDs:         allEventIds,
+			expErr:              cErr,
+		},
+		{
+			name:                "Recover Function not called when expected error",
+			c:                   NewConsumer(consumerName, cFnCanc, WithRecoverFunction(rFnSame)),
+			expConsumeCount:     3,
+			expRecoveredCount:   0,
+			expMetricErrorCount: 0,
+			expEventIDs:         noEventIds,
+			expErr:              context.Canceled,
+		},
+		{
+			name:                "Recover Function handles error",
+			c:                   NewConsumer(consumerName, cFnErr, WithRecoverFunction(rFnNil)),
+			expConsumeCount:     3,
+			expRecoveredCount:   3,
+			expMetricErrorCount: 3,
+			expEventIDs:         allEventIds,
+			expErr:              nil,
+		},
+		{
+			name:                "Recover Function throws different error",
+			c:                   NewConsumer(consumerName, cFnErr, WithRecoverFunction(rFnDiff)),
+			expConsumeCount:     3,
+			expRecoveredCount:   3,
+			expMetricErrorCount: 3,
+			expEventIDs:         allEventIds,
+			expErr:              rErr,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			metrics.ConsumerErrors.Reset()
+			metrics.ConsumerSkippedEvents.Reset()
+			*consumedCounter = 0
+			*recoveredCounter = 0
+			*eventId = 0
+
+			for i, ev := range evts {
+				err := tc.c.Consume(ctx, f, ev)
+				require.Equal(t, tc.expEventIDs[i], *eventId)
+				jtest.Require(t, tc.expErr, err)
+			}
+
+			require.Equal(t, tc.expConsumeCount, *consumedCounter)
+			require.Equal(t, tc.expRecoveredCount, *recoveredCounter)
+		})
+	}
+}

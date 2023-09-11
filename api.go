@@ -145,7 +145,7 @@ type StreamClient interface {
 }
 
 // StreamFunc is the main reflex stream interface that all implementations should provide.
-// It returns a long lived StreamClient that will stream events from the source.
+// It returns a long-lived StreamClient that will stream events from the source.
 type StreamFunc func(ctx context.Context, after string, opts ...StreamOption) (StreamClient, error)
 
 // ConsumeFunc is the main reflex consume interface. It blocks while events are
@@ -157,7 +157,7 @@ type ConsumeFunc func(context.Context, Consumer, ...StreamOption) error
 // Consumable is an interface for an object that provides a ConsumeFunc with the name Run.
 // Deprecated: Please use Spec.
 type Consumable interface {
-	// Run blocks while events are streamed to consumer. It always returns a non-nil error.
+	// Consume blocks while events are streamed to consumer. It always returns a non-nil error.
 	// Cancel the context to return early.
 	Consume(context.Context, Consumer, ...StreamOption) error
 }
@@ -173,3 +173,10 @@ type CursorStore interface {
 	// Flush writes any buffered cursors to the underlying store.
 	Flush(ctx context.Context) error
 }
+
+// RecoveryFunc is a function that can be added as a ConsumerOption using the WithRecoverFunction
+// function to provide handling for when a consumer function returns an error. This handling can
+// just be recording the error or since it takes in the error and returns an error as well it can
+// return nil to "recover" from the error (additional work may obviously be needed to do any actual
+// recovery), return the same error if it could not be handled or even return a different error.
+type RecoveryFunc func(context.Context, fate.Fate, *Event, Consumer, error) error

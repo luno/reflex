@@ -30,6 +30,7 @@ type consumer struct {
 	filterIncludeTypes []EventType
 	activityKey        string
 	filterEvent        EventFilter
+	rfn                RecoveryFunc
 }
 
 // ConsumerOption will change the behaviour of the consumer
@@ -90,6 +91,19 @@ func WithEventFilter(flt EventFilter) ConsumerOption {
 	}
 }
 
+// WithRecoverFunction provides an option to specify a recovery function to be called when a consuming an event returns
+// an error and potentially changing the error returned or even eliminate it by return nil. It can also be used for
+// notification and/or recording of events that failed to process successfully.
+func WithRecoverFunction(rfn RecoveryFunc) ConsumerOption {
+	return func(c *consumer) {
+		c.rfn = rfn
+	}
+}
+
+var defaultRecoveryFunc = func(_ context.Context, _ fate.Fate, _ *Event, _ Consumer, err error) error {
+	return err
+}
+
 // NewConsumer returns a new instrumented consumer of events.
 func NewConsumer(name string, fn func(context.Context, fate.Fate, *Event) error,
 	opts ...ConsumerOption,
@@ -111,6 +125,9 @@ func NewConsumer(name string, fn func(context.Context, fate.Fate, *Event) error,
 		o(c)
 	}
 	c.activityKey = metrics.ConsumerActivityGauge.Register(ls, c.activityTTL)
+	if c.rfn == nil {
+		c.rfn = defaultRecoveryFunc
+	}
 	_ = c.Reset()
 	return c
 }
@@ -150,7 +167,7 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 	} else if ok {
 		err = c.fn(ctx, ft, event)
 		if err != nil && !IsExpected(err) {
-			c.errorCounter.Inc()
+			err = c.consumeError(ctx, ft, event, err)
 		}
 
 		latency := time.Since(t0)
@@ -159,6 +176,14 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 		metrics.ConsumerSkippedEvents.WithLabelValues(c.name).Inc()
 	}
 
+	return err
+}
+
+func (c *consumer) consumeError(ctx context.Context, ft fate.Fate, event *Event, err error) error {
+	err = c.rfn(ctx, ft, event, c, err)
+	if err != nil && !IsExpected(err) {
+		c.errorCounter.Inc()
+	}
 	return err
 }
 
