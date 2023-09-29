@@ -5,9 +5,8 @@ go 1.20
 require (
 	github.com/aws/aws-sdk-go v1.44.284
 	github.com/go-sql-driver/mysql v1.7.1
-	github.com/golang/protobuf v1.5.3
 	github.com/luno/fate v0.0.0-20191017091315-567fa9070f1c
-	github.com/luno/jettison v0.0.0-20230821153305-965cfff8ad20
+	github.com/luno/jettison v0.0.0-20230912135954-09d6084f5df9
 	github.com/prometheus/client_golang v1.15.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/stretchr/testify v1.8.3
@@ -15,7 +14,6 @@ require (
 	go.opentelemetry.io/otel/sdk v1.14.0
 	go.opentelemetry.io/otel/trace v1.14.0
 	gocloud.dev v0.30.0
-	golang.org/x/net v0.11.0
 	google.golang.org/grpc v1.56.0
 	google.golang.org/protobuf v1.30.0
 )
@@ -47,6 +45,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/wire v0.5.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.11.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
@@ -56,6 +55,7 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
+	golang.org/x/net v0.11.0 // indirect
 	golang.org/x/sys v0.9.0 // indirect
 	golang.org/x/text v0.10.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect

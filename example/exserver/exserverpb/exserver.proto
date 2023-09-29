@@ -1,12 +1,15 @@
 syntax = "proto3";
 
 package exserverpb;
+
 import "github.com/luno/reflex/reflexpb/reflex.proto";
 
-service ExServer{
-  rpc StreamEvent1 (reflexpb.StreamRequest) returns (stream reflexpb.Event) {}
-  rpc StreamEvent2 (reflexpb.StreamRequest) returns (stream reflexpb.Event) {}
-  rpc Echo (EchoMsg) returns (EchoMsg) {}
+option go_package = "github.com/luno/reflex/example/internal/exserver/exserverpb";
+
+service ExServer {
+  rpc StreamEvent1(reflexpb.StreamRequest) returns (stream reflexpb.Event) {}
+  rpc StreamEvent2(reflexpb.StreamRequest) returns (stream reflexpb.Event) {}
+  rpc Echo(EchoMsg) returns (EchoMsg) {}
 }
 
 message EchoMsg {

@@ -3,11 +3,11 @@ package reflex
 import (
 	"context"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 const (

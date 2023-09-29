@@ -1,40 +1,29 @@
 package reflex
 
 import (
-	"log"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/duration"
 	"github.com/luno/reflex/reflexpb"
 )
 
 func eventToProto(e *Event) (*reflexpb.Event, error) {
-	ts, err := ptypes.TimestampProto(e.Timestamp)
-	if err != nil {
-		return nil, err
-	}
-
 	return &reflexpb.Event{
 		Id:        e.ID,
 		ForeignId: e.ForeignID,
 		Type:      int32(e.Type.ReflexType()),
-		Timestamp: ts,
+		Timestamp: timestamppb.New(e.Timestamp),
 		Metadata:  e.MetaData,
 		Trace:     e.Trace,
 	}, nil
 }
 
 func eventFromProto(e *reflexpb.Event) (*Event, error) {
-	ts, err := ptypes.Timestamp(e.Timestamp)
-	if err != nil {
-		return nil, err
-	}
-
 	return &Event{
 		ID:        e.Id,
 		ForeignID: e.ForeignId,
 		Type:      eventType(e.Type),
-		Timestamp: ts,
+		Timestamp: e.Timestamp.AsTime(),
 		MetaData:  e.Metadata,
 		Trace:     e.Trace,
 	}, nil
@@ -65,10 +54,8 @@ func optsFromProto(options *reflexpb.StreamOptions) []StreamOption {
 	}
 
 	if options.Lag != nil {
-		d, err := ptypes.Duration(options.Lag)
-		if err != nil {
-			log.Printf("reflex: Error parsing request option lag: %v", err)
-		} else if d > 0 {
+		d := options.Lag.AsDuration()
+		if d > 0 {
 			opts = append(opts, WithStreamLag(d))
 		}
 	}
@@ -90,9 +77,9 @@ func optsToProto(opts []StreamOption) (*reflexpb.StreamOptions, error) {
 		o(options)
 	}
 
-	var lag *duration.Duration
+	var lag *durationpb.Duration
 	if options.Lag > 0 {
-		lag = ptypes.DurationProto(options.Lag)
+		lag = durationpb.New(options.Lag)
 	}
 
 	return &reflexpb.StreamOptions{
