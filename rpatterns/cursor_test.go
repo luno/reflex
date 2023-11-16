@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/luno/jettison/jtest"
@@ -159,4 +160,38 @@ func TestMemoryCStore(t *testing.T) {
 	actual, err = cs.GetCursor(ctx, cName1)
 	require.NoError(t, err)
 	require.Equal(t, c2, actual)
+}
+
+func TestConcurrentWrites(t *testing.T) {
+	var (
+		writerReadyGroup     sync.WaitGroup
+		writerCompletedGroup sync.WaitGroup
+	)
+
+	store := rpatterns.MemCursorStore()
+	ctx := context.Background()
+
+	writerCount := 100
+	writerReadyGroup.Add(writerCount)
+	for i := 0; i < writerCount; i++ {
+		writerCompletedGroup.Add(1)
+		go func(writerReadyGroup *sync.WaitGroup, writerCompletedGroup *sync.WaitGroup) {
+			writerReadyGroup.Done()
+			writerReadyGroup.Wait()
+			for i := 0; i < 100; i++ {
+				// Write the thing
+				val := fmt.Sprintf("%v", i)
+				err := store.SetCursor(ctx, "single-key", val)
+				jtest.RequireNil(t, err)
+
+				// Flush is a noop but covering it will ensure that it stays concurrent safe
+				err = store.Flush(ctx)
+				jtest.RequireNil(t, err)
+			}
+			writerCompletedGroup.Done()
+		}(&writerReadyGroup, &writerCompletedGroup)
+	}
+
+	writerReadyGroup.Wait()
+	writerCompletedGroup.Wait()
 }

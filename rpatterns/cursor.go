@@ -3,6 +3,7 @@ package rpatterns
 import (
 	"context"
 	"strconv"
+	"sync"
 
 	"github.com/luno/reflex"
 )
@@ -75,14 +76,20 @@ func MemCursorStore(opts ...MemOpt) reflex.CursorStore {
 }
 
 type memCursorStore struct {
+	mu      sync.Mutex
 	cursors map[string]string
 }
 
 func (m *memCursorStore) GetCursor(_ context.Context, consumerName string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.cursors[consumerName], nil
 }
 
 func (m *memCursorStore) SetCursor(_ context.Context, consumerName string, cursor string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.cursors == nil {
 		m.cursors = make(map[string]string)
 	}
