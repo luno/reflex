@@ -5,7 +5,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/log"
@@ -64,8 +63,6 @@ func Run(in context.Context, s Spec) error {
 		defer closer.Close()
 	}
 
-	f := fate.New()
-
 	for {
 		e, err := sc.Recv()
 		if err != nil {
@@ -89,7 +86,7 @@ func Run(in context.Context, s Spec) error {
 			}
 		}
 
-		if err := s.consumer.Consume(ctx, f, e); err != nil {
+		if err := s.consumer.Consume(ctx, e); err != nil {
 			return errors.Wrap(err, "consume error", j.MKS{
 				"consumer":  s.consumer.Name(),
 				"event_id":  e.ID,

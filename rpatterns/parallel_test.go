@@ -7,7 +7,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/luno/fate"
 	"github.com/stretchr/testify/require"
 
 	"github.com/luno/reflex"
@@ -115,7 +114,7 @@ func TestParallel(t *testing.T) {
 
 			wg.Add(len(test.events))
 
-			fn := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+			fn := func(ctx context.Context, e *reflex.Event) error {
 				pMutex.Lock()
 				defer pMutex.Unlock()
 				defer wg.Done()

@@ -4,8 +4,6 @@ import (
 	"context"
 	"strconv"
 	"time"
-
-	"github.com/luno/fate"
 )
 
 // Event is the reflex event. It is an immutable notification event that indicates that
@@ -114,11 +112,11 @@ func NewSpec(stream StreamFunc, cstore CursorStore, consumer Consumer,
 // since reflex provides at-least-once event delivery.
 type Consumer interface {
 	Name() string
-	Consume(context.Context, fate.Fate, *Event) error
+	Consume(context.Context, *Event) error
 }
 
 // resetter is an optional interface that a consumer can implement indicating
-// that it is stateful and requires reset at the start of each Run.
+// that it is stateful and requires resetting at the start of each Run.
 type resetter interface {
 	Reset() error
 }
@@ -179,4 +177,4 @@ type CursorStore interface {
 // just be recording the error or since it takes in the error and returns an error as well it can
 // return nil to "recover" from the error (additional work may obviously be needed to do any actual
 // recovery), return the same error if it could not be handled or even return a different error.
-type RecoveryFunc func(context.Context, fate.Fate, *Event, Consumer, error) error
+type RecoveryFunc func(context.Context, *Event, Consumer, error) error

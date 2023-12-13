@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/jtest"
 	"github.com/stretchr/testify/assert"
@@ -78,7 +77,7 @@ func TestRunBatchConsumer(t *testing.T) {
 				b.events = append(b.events, ItoE(0))
 			}
 
-			f := func(ctx context.Context, f fate.Fate, b rpatterns.Batch) error {
+			f := func(ctx context.Context, b rpatterns.Batch) error {
 				mu.Lock()
 				defer mu.Unlock()
 
@@ -134,7 +133,7 @@ func TestReset(t *testing.T) {
 			events := ItoEList(tt.failEvents...)
 			b.events = events
 
-			f := func(ctx context.Context, f fate.Fate, b rpatterns.Batch) error {
+			f := func(ctx context.Context, b rpatterns.Batch) error {
 				for k, v := range b {
 					assert.Equal(t, int64(k+1), v.IDInt())
 				}
@@ -164,7 +163,7 @@ func TestInvalidConfig(t *testing.T) {
 	events := ItoEList([]int{1, 2, 3}...)
 	b.events = events
 
-	f := func(ctx context.Context, f fate.Fate, b rpatterns.Batch) error {
+	f := func(ctx context.Context, b rpatterns.Batch) error {
 		return nil
 	}
 
@@ -210,7 +209,7 @@ func TestBatchError(t *testing.T) {
 	batches := make(chan rpatterns.Batch)
 	cs := rpatterns.MemCursorStore()
 	consumer := rpatterns.NewBatchConsumer("test", cs,
-		func(ctx context.Context, f fate.Fate, batch rpatterns.Batch) error {
+		func(ctx context.Context, batch rpatterns.Batch) error {
 			batches <- batch
 			return expErr
 		},
@@ -297,7 +296,7 @@ func TestContextCancelled(t *testing.T) {
 
 	cs := rpatterns.MemCursorStore()
 	consumer := rpatterns.NewBatchConsumer("test", cs,
-		func(ctx context.Context, f fate.Fate, batch rpatterns.Batch) error {
+		func(ctx context.Context, batch rpatterns.Batch) error {
 			if ctx.Err() != nil {
 				return context.Canceled
 			}
@@ -313,7 +312,7 @@ func TestContextCancelled(t *testing.T) {
 				}
 			}
 
-			return f.Tempt()
+			return nil
 		},
 		time.Second, 5,
 	)
@@ -376,7 +375,7 @@ func TestBatchPeriod(t *testing.T) {
 
 	cs := rpatterns.MemCursorStore()
 	consumer := rpatterns.NewBatchConsumer("test", cs,
-		func(ctx context.Context, f fate.Fate, batch rpatterns.Batch) error {
+		func(ctx context.Context, batch rpatterns.Batch) error {
 			for _, b := range batch {
 				_, ok := processTracker[b.IDInt()]
 				assert.False(t, ok, "event id already processed", b.ID)
@@ -387,7 +386,7 @@ func TestBatchPeriod(t *testing.T) {
 				}
 			}
 
-			return f.Tempt()
+			return nil
 		},
 		time.Millisecond*10, 0,
 	)
@@ -438,7 +437,7 @@ func TestBatchErrorState(t *testing.T) {
 
 	cs := rpatterns.MemCursorStore()
 	consumer := rpatterns.NewBatchConsumer("test", cs,
-		func(ctx context.Context, f fate.Fate, batch rpatterns.Batch) error {
+		func(ctx context.Context, batch rpatterns.Batch) error {
 			chNextEvent <- struct{}{}
 
 			// Error on first attempt. Second attempt should be fine
@@ -455,7 +454,7 @@ func TestBatchErrorState(t *testing.T) {
 					processTracker[b.IDInt()] = true
 				}
 
-				return f.Tempt()
+				return nil
 			}
 		},
 		time.Millisecond, 0,
@@ -509,7 +508,7 @@ func TestBatchErrorState(t *testing.T) {
 
 func TestNewBatchConsumerCanStop(t *testing.T) {
 	b := new(bootstrapMock)
-	f := func(ctx context.Context, f fate.Fate, b rpatterns.Batch) error {
+	f := func(ctx context.Context, b rpatterns.Batch) error {
 		return nil
 	}
 

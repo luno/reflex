@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/log"
@@ -15,11 +14,10 @@ import (
 // Batch is a batch of reflex events.
 type Batch []*reflex.Event
 
-type BatchConsumeFn func(context.Context, fate.Fate, Batch) error
+type BatchConsumeFn func(context.Context, Batch) error
 
 type batchEvent struct {
 	ackEvent *AckEvent
-	f        fate.Fate
 }
 
 const minWait = time.Millisecond * 100
@@ -95,14 +93,14 @@ func (c *BatchConsumer) Stop() error {
 }
 
 // enqueue adds the event to the buffer or returns error if batch needs to be reset.
-func (c *BatchConsumer) enqueue(ctx context.Context, f fate.Fate, e *AckEvent) error {
+func (c *BatchConsumer) enqueue(ctx context.Context, e *AckEvent) error {
 	if c.flushPeriod == 0 && c.flushLen == 0 {
 		return errors.New("batchPeriod or batchLen must be non-zero")
 	}
 
 	// Add event to batch queue
 	select {
-	case c.chEvent <- batchEvent{ackEvent: e, f: f}:
+	case c.chEvent <- batchEvent{ackEvent: e}:
 	case _, ok := <-c.chResult:
 		if !ok {
 			return ErrBatchState
@@ -135,7 +133,6 @@ func processEvents(
 	var (
 		batch      []*AckEvent
 		flushTimer <-chan time.Time
-		f          fate.Fate
 	)
 
 	for {
@@ -143,7 +140,6 @@ func processEvents(
 
 		select {
 		case ev := <-chEvents:
-			f = ev.f
 
 			if len(batch) == 0 && flushPeriod != 0 {
 				wait := ev.ackEvent.Timestamp.Add(flushPeriod).Sub(time.Now())
@@ -172,7 +168,7 @@ func processEvents(
 			return
 		}
 
-		err := processBatch(ctx, f, batch, fnConsume)
+		err := processBatch(ctx, batch, fnConsume)
 
 		if !timerExpired || err != nil && timerExpired {
 			// If flushTimer expired (background processing), terminate processing and set to error state
@@ -193,14 +189,14 @@ func processEvents(
 	}
 }
 
-func processBatch(ctx context.Context, f fate.Fate, batch []*AckEvent, fnConsume BatchConsumeFn) error {
+func processBatch(ctx context.Context, batch []*AckEvent, fnConsume BatchConsumeFn) error {
 	var b Batch
 	for _, e := range batch {
 		b = append(b, &e.Event)
 	}
 	last := batch[len(batch)-1]
 
-	err := fnConsume(ctx, f, b)
+	err := fnConsume(ctx, b)
 	if err != nil {
 		return errors.Wrap(err, "batch consumer error")
 	}
@@ -214,7 +210,7 @@ func processBatch(ctx context.Context, f fate.Fate, batch []*AckEvent, fnConsume
 // NewBatchConsumer returns a new BatchConsumer. Either batchPeriod or batchLen
 // must be configured (non-zero).
 func NewBatchConsumer(name string, cstore reflex.CursorStore,
-	consume func(context.Context, fate.Fate, Batch) error,
+	consume func(context.Context, Batch) error,
 	batchPeriod time.Duration, batchLen int,
 	opts ...reflex.ConsumerOption,
 ) *BatchConsumer {
@@ -229,8 +225,8 @@ func NewBatchConsumer(name string, cstore reflex.CursorStore,
 		cancel: func() {},
 	}
 
-	fn := func(ctx context.Context, f fate.Fate, e *AckEvent) error {
-		return bc.enqueue(ctx, f, e)
+	fn := func(ctx context.Context, e *AckEvent) error {
+		return bc.enqueue(ctx, e)
 	}
 
 	bc.AckConsumer = NewAckConsumer(name, cstore, fn, opts...)

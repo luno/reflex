@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"log"
 
-	"github.com/luno/fate"
-
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/example/exserver"
 	"github.com/luno/reflex/example/exserver/db"
@@ -14,11 +12,11 @@ import (
 
 // ConsumeLocalStreamForever connects to the local server and prints out each event
 func ConsumeLocalStreamForever(dbc *sql.DB) {
-	f := func(ctx context.Context, fate fate.Fate, event *exserver.ExEvent) error {
+	f := func(ctx context.Context, event *exserver.ExEvent) error {
 		typ := exserver.ExEventType(event.Type.ReflexType())
 		log.Printf("ops: consuming event %s of type %v", event.ID, typ)
 
-		return fate.Tempt()
+		return nil
 	}
 
 	consumer := reflex.NewConsumer(exserver.ConsumerNameInternalLoop, f)

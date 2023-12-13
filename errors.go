@@ -3,7 +3,6 @@ package reflex
 import (
 	"context"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"google.golang.org/grpc/status"
@@ -42,7 +41,7 @@ func IsHeadReachedErr(err error) bool {
 
 // IsExpected returns true if the error is expected during normal streaming operation.
 func IsExpected(err error) bool {
-	if errors.IsAny(err, context.Canceled, context.DeadlineExceeded, ErrStopped, fate.ErrTempt) {
+	if errors.IsAny(err, context.Canceled, context.DeadlineExceeded, ErrStopped) {
 		return true
 	}
 

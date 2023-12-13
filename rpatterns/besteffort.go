@@ -3,7 +3,6 @@ package rpatterns
 import (
 	"context"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/log"
@@ -14,7 +13,7 @@ import (
 // NewBestEffortConsumer returns a reflex consumer that ignores errors
 // after the provided number of retries and therefore eventually
 // continues to the next event.
-func NewBestEffortConsumer(name string, retries int, fn func(context.Context, fate.Fate, *reflex.Event) error,
+func NewBestEffortConsumer(name string, retries int, fn func(context.Context, *reflex.Event) error,
 	opts ...reflex.ConsumerOption,
 ) reflex.Consumer {
 	be := &bestEffort{
@@ -26,15 +25,15 @@ func NewBestEffortConsumer(name string, retries int, fn func(context.Context, fa
 }
 
 type bestEffort struct {
-	inner      func(context.Context, fate.Fate, *reflex.Event) error
+	inner      func(context.Context, *reflex.Event) error
 	retries    int
 	name       string
 	retryID    string
 	retryCount int
 }
 
-func (b *bestEffort) consume(ctx context.Context, f fate.Fate, e *reflex.Event) error {
-	err := b.inner(ctx, f, e)
+func (b *bestEffort) consume(ctx context.Context, e *reflex.Event) error {
+	err := b.inner(ctx, e)
 	if err != nil {
 		if b.retryID != e.ID {
 			b.retryCount = 0

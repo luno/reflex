@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/stretchr/testify/assert"
@@ -72,7 +71,7 @@ func TestBootstrap(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var results []*reflex.Event
 			consumer := reflex.NewConsumer("test",
-				func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+				func(ctx context.Context, e *reflex.Event) error {
 					results = append(results, e)
 					return nil
 				})

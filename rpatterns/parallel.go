@@ -6,8 +6,6 @@ import (
 	"hash/fnv"
 	"strconv"
 
-	"github.com/luno/fate"
-
 	"github.com/luno/reflex"
 )
 
@@ -130,15 +128,15 @@ func ConsumerShards(name string, n int, opts ...ParallelOption) []ConsumerShard 
 // This reflex.Consumer can be used in reflex.NewSpec to make it runnable.
 func ParallelConsumer(
 	shard ConsumerShard,
-	consume func(context.Context, fate.Fate, *reflex.Event) error,
+	consume func(context.Context, *reflex.Event) error,
 	opts ...reflex.ConsumerOption,
 ) reflex.Consumer {
-	filteredConsume := func(ctx context.Context, fate fate.Fate, event *reflex.Event) error {
+	filteredConsume := func(ctx context.Context, event *reflex.Event) error {
 		mine, err := shard.filter(event)
 		if err != nil || !mine {
 			return err
 		}
-		return consume(ctx, fate, event)
+		return consume(ctx, event)
 	}
 	return reflex.NewConsumer(shard.Name, filteredConsume, opts...)
 }
@@ -148,15 +146,15 @@ func ParallelConsumer(
 func ParallelAckConsumer(
 	shard ConsumerShard,
 	store reflex.CursorStore,
-	consume func(context.Context, fate.Fate, *AckEvent) error,
+	consume func(context.Context, *AckEvent) error,
 	opts ...reflex.ConsumerOption,
 ) reflex.Consumer {
-	filteredConsume := func(ctx context.Context, fate fate.Fate, event *AckEvent) error {
+	filteredConsume := func(ctx context.Context, event *AckEvent) error {
 		mine, err := shard.filter(&event.Event)
 		if err != nil || !mine {
 			return err
 		}
-		return consume(ctx, fate, event)
+		return consume(ctx, event)
 	}
 	return NewAckConsumer(shard.Name, store, filteredConsume, opts...)
 }
@@ -167,7 +165,7 @@ func ParallelAckConsumer(
 // See ParallelOption for more details on passing through reflex.ConsumerOption or reflex.StreamOption
 func ParallelSpecs(name string, n int,
 	stream reflex.StreamFunc, store reflex.CursorStore,
-	consume func(context.Context, fate.Fate, *reflex.Event) error,
+	consume func(context.Context, *reflex.Event) error,
 	opts ...ParallelOption,
 ) []reflex.Spec {
 	var specs []reflex.Spec
@@ -231,11 +229,11 @@ func ParallelAck(getCtx getCtxFn, getConsumer getAckConsumerFn, n int, stream re
 func makeConsumer(conf parallelConfig, m, n int, inner reflex.Consumer) reflex.Consumer {
 	filter := filterOnHash(m, n, conf.hashFn)
 
-	f := func(ctx context.Context, fate fate.Fate, event *reflex.Event) error {
+	f := func(ctx context.Context, event *reflex.Event) error {
 		if isInShard, err := filter(event); !isInShard || err != nil {
 			return err
 		}
-		return inner.Consume(ctx, fate, event)
+		return inner.Consume(ctx, event)
 	}
 
 	return simpleConsumer{name: inner.Name(), consumeFn: f}
@@ -246,11 +244,11 @@ func makeConsumer(conf parallelConfig, m, n int, inner reflex.Consumer) reflex.C
 func makeAckConsumer(conf parallelConfig, m, n int, inner AckConsumer) *AckConsumer {
 	filter := filterOnHash(m, n, conf.hashFn)
 
-	f := func(ctx context.Context, fate fate.Fate, event *AckEvent) error {
+	f := func(ctx context.Context, event *AckEvent) error {
 		if isInShard, err := filter(&event.Event); !isInShard || err != nil {
 			return err
 		}
-		return inner.Consume(ctx, fate, &event.Event)
+		return inner.Consume(ctx, &event.Event)
 	}
 
 	return NewAckConsumer(inner.Name(), inner.cstore, f)
@@ -258,15 +256,15 @@ func makeAckConsumer(conf parallelConfig, m, n int, inner AckConsumer) *AckConsu
 
 type simpleConsumer struct {
 	name      string
-	consumeFn func(ctx context.Context, fate fate.Fate, event *reflex.Event) error
+	consumeFn func(ctx context.Context, event *reflex.Event) error
 }
 
 func (s simpleConsumer) Name() string {
 	return s.name
 }
 
-func (s simpleConsumer) Consume(ctx context.Context, f fate.Fate, event *reflex.Event) error {
-	return s.consumeFn(ctx, f, event)
+func (s simpleConsumer) Consume(ctx context.Context, event *reflex.Event) error {
+	return s.consumeFn(ctx, event)
 }
 
 // WithStreamOpts passes stream options in to the reflex.Spec

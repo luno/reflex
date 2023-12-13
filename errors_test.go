@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/status"
@@ -20,11 +19,6 @@ func TestIsExpected(t *testing.T) {
 			Name:     "nil",
 			Err:      nil,
 			Expected: false,
-		},
-		{
-			Name:     "fate",
-			Err:      fate.ErrTempt,
-			Expected: true,
 		},
 		{
 			Name:     "context.Canceled",
@@ -74,11 +68,6 @@ func TestIsFilterErr(t *testing.T) {
 		{
 			Name:     "nil",
 			Err:      nil,
-			Expected: false,
-		},
-		{
-			Name:     "fate",
-			Err:      fate.ErrTempt,
 			Expected: false,
 		},
 		{

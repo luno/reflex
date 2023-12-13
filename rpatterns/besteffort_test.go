@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rpatterns"
@@ -61,7 +60,7 @@ func TestBestEffortConsumer(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			events := make(map[string]int)
-			fn := func(_ context.Context, _ fate.Fate, e *reflex.Event) error {
+			fn := func(_ context.Context, e *reflex.Event) error {
 				events[e.ID]++
 				if events[e.ID] <= test.errorsPerEvent {
 					return consumerErr
@@ -73,7 +72,7 @@ func TestBestEffortConsumer(t *testing.T) {
 			c := rpatterns.NewBestEffortConsumer("test", test.retries, fn)
 			next := 1
 			for i := 0; i < test.input; i++ {
-				err := c.Consume(context.TODO(), fate.New(), ItoE(next))
+				err := c.Consume(context.TODO(), ItoE(next))
 				actual = append(actual, err)
 				if err == nil {
 					next++

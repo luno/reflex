@@ -3,8 +3,6 @@ package rpatterns
 import (
 	"context"
 
-	"github.com/luno/fate"
-
 	"github.com/luno/reflex"
 )
 
@@ -31,7 +29,7 @@ func (e *AckEvent) Ack(ctx context.Context) error {
 // should be acked.
 type AckConsumer struct {
 	name    string
-	consume func(context.Context, fate.Fate, *AckEvent) error
+	consume func(context.Context, *AckEvent) error
 	cstore  reflex.CursorStore
 	opts    []reflex.ConsumerOption
 }
@@ -43,8 +41,8 @@ func (c *AckConsumer) Name() string {
 
 // Consume executes the consumer business logic, converting the reflex event
 // to an AckEvent.
-func (c *AckConsumer) Consume(ctx context.Context, f fate.Fate, e *reflex.Event) error {
-	return c.consume(ctx, f, &AckEvent{
+func (c *AckConsumer) Consume(ctx context.Context, e *reflex.Event) error {
+	return c.consume(ctx, &AckEvent{
 		Event:        *e,
 		cstore:       c.cstore,
 		consumerName: c.name,
@@ -53,7 +51,7 @@ func (c *AckConsumer) Consume(ctx context.Context, f fate.Fate, e *reflex.Event)
 
 // NewAckConsumer returns a new AckConsumer.
 func NewAckConsumer(name string, cstore reflex.CursorStore,
-	consume func(context.Context, fate.Fate, *AckEvent) error,
+	consume func(context.Context, *AckEvent) error,
 	opts ...reflex.ConsumerOption,
 ) *AckConsumer {
 	return &AckConsumer{

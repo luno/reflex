@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/stretchr/testify/assert"
 
@@ -100,7 +99,7 @@ func TestConsumable(t *testing.T) {
 			consumable := reflex.NewConsumable(streamer.Stream, cstore)
 
 			var results []*reflex.Event
-			f := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+			f := func(ctx context.Context, e *reflex.Event) error {
 				results = append(results, e)
 				if len(test.fErrors) == 0 {
 					return nil

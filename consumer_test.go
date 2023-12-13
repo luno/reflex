@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/jtest"
 	"github.com/prometheus/client_golang/prometheus"
@@ -72,7 +71,7 @@ func TestReuseConsumer(t *testing.T) {
 
 	metrics.ConsumerLag.Reset()
 
-	con := NewConsumer("test", func(ctx context.Context, fate fate.Fate, event *Event) error {
+	con := NewConsumer("test", func(ctx context.Context, event *Event) error {
 		// Should have a metric when running inside a Consume function
 		assert.Len(t, fetchMetrics(), 1)
 		if event.IDInt() < idToFail {
@@ -118,9 +117,9 @@ func fetchMetrics() []prometheus.Metric {
 
 func TestConsumeFromFresh(t *testing.T) {
 	c := NewConsumer("test",
-		func(context.Context, fate.Fate, *Event) error { return nil },
+		func(context.Context, *Event) error { return nil },
 	)
-	err := c.Consume(context.Background(), fate.New(), &Event{
+	err := c.Consume(context.Background(), &Event{
 		ID:        "1",
 		Type:      sType(1),
 		Timestamp: time.Now(),
@@ -157,7 +156,7 @@ func TestPassTraceIntoConsumerContext(t *testing.T) {
 		}
 
 		c := NewConsumer("test",
-			func(ctx context.Context, f fate.Fate, e *Event) error {
+			func(ctx context.Context, e *Event) error {
 				span := trace.SpanFromContext(ctx)
 				require.Equal(t, expectedSpanCtx.TraceID().String(), span.SpanContext().TraceID().String())
 				require.Equal(t, expectedSpanCtx.TraceState().String(), span.SpanContext().TraceState().String())
@@ -166,7 +165,7 @@ func TestPassTraceIntoConsumerContext(t *testing.T) {
 			},
 		)
 
-		err = c.Consume(context.Background(), fate.New(), e)
+		err = c.Consume(context.Background(), e)
 		jtest.RequireNil(t, err)
 	})
 }
@@ -174,9 +173,8 @@ func TestPassTraceIntoConsumerContext(t *testing.T) {
 func TestConsumeWithSkip(t *testing.T) {
 	ctx := context.Background()
 	consumerName := "test_consumer"
-	f := fate.New()
 	consumedCounter := new(int)
-	cFn := func(context.Context, fate.Fate, *Event) error {
+	cFn := func(context.Context, *Event) error {
 		*consumedCounter++
 		return nil
 	}
@@ -273,7 +271,7 @@ func TestConsumeWithSkip(t *testing.T) {
 			*consumedCounter = 0
 
 			for i, ev := range evts {
-				err := tc.c.Consume(ctx, f, ev)
+				err := tc.c.Consume(ctx, ev)
 				if tc.errs == nil {
 					jtest.RequireNil(t, err)
 				} else {
@@ -291,31 +289,30 @@ func TestConsumeWithSkip(t *testing.T) {
 func TestConsumeWithErrorAndReporting(t *testing.T) {
 	ctx := context.Background()
 	consumerName := "test_consumer"
-	f := fate.New()
 	consumedCounter := new(int)
 	recoveredCounter := new(int)
 	eventId := new(int)
 	cErr := errors.New("cfn errored")
 	rErr := errors.New("rfn changed error")
-	cFnErr := func(context.Context, fate.Fate, *Event) error {
+	cFnErr := func(context.Context, *Event) error {
 		*consumedCounter++
 		return errors.Wrap(cErr, "")
 	}
-	cFnCanc := func(context.Context, fate.Fate, *Event) error {
+	cFnCanc := func(context.Context, *Event) error {
 		*consumedCounter++
 		return errors.Wrap(context.Canceled, "")
 	}
-	rFnNil := func(_ context.Context, _ fate.Fate, e *Event, c Consumer, err error) error {
+	rFnNil := func(_ context.Context, e *Event, c Consumer, err error) error {
 		*recoveredCounter++
 		*eventId, _ = strconv.Atoi(e.ID)
 		return nil
 	}
-	rFnSame := func(_ context.Context, _ fate.Fate, e *Event, c Consumer, err error) error {
+	rFnSame := func(_ context.Context, e *Event, c Consumer, err error) error {
 		*recoveredCounter++
 		*eventId, _ = strconv.Atoi(e.ID)
 		return err
 	}
-	rFnDiff := func(_ context.Context, _ fate.Fate, e *Event, c Consumer, err error) error {
+	rFnDiff := func(_ context.Context, e *Event, c Consumer, err error) error {
 		*recoveredCounter++
 		*eventId, _ = strconv.Atoi(e.ID)
 		return errors.Wrap(rErr, "")
@@ -397,7 +394,7 @@ func TestConsumeWithErrorAndReporting(t *testing.T) {
 			*eventId = 0
 
 			for i, ev := range evts {
-				err := tc.c.Consume(ctx, f, ev)
+				err := tc.c.Consume(ctx, ev)
 				require.Equal(t, tc.expEventIDs[i], *eventId)
 				jtest.Require(t, tc.expErr, err)
 			}

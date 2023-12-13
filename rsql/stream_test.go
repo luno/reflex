@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/jtest"
@@ -113,7 +112,7 @@ func TestConsumeStreamClient(t *testing.T) {
 			}
 
 			var results []*reflex.Event
-			f := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+			f := func(ctx context.Context, e *reflex.Event) error {
 				results = append(results, e)
 				return nil
 			}
@@ -171,7 +170,7 @@ func TestStreamClientErrors(t *testing.T) {
 	errNOK := errors.New("nok", j.C("ERR_NOK"))
 	mocks := []error{errNOK, nil, nil, errNOK}
 	var calls []*reflex.Event
-	f := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+	f := func(ctx context.Context, e *reflex.Event) error {
 		calls = append(calls, e)
 		err := mocks[0]
 		mocks = mocks[1:]
@@ -246,7 +245,7 @@ func TestConsumeStreamLag(t *testing.T) {
 
 	errDone := errors.New("done", j.C("ERR_DONE"))
 	feed := make(chan *reflex.Event)
-	f := func(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+	f := func(ctx context.Context, e *reflex.Event) error {
 		feed <- e
 		if e.IDInt() == int64(total) {
 			close(feed)

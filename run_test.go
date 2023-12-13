@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/jtest"
 	"github.com/stretchr/testify/assert"
@@ -172,7 +171,7 @@ func (m *mockconsumer) Name() string {
 	return ""
 }
 
-func (m *mockconsumer) Consume(ctx context.Context, fate fate.Fate, event *Event) error {
+func (m *mockconsumer) Consume(ctx context.Context, event *Event) error {
 	m.Events = append(m.Events, event)
 	return nil
 }

@@ -1,11 +1,10 @@
 module github.com/luno/reflex
 
-go 1.20
+go 1.21
 
 require (
 	github.com/aws/aws-sdk-go v1.44.284
 	github.com/go-sql-driver/mysql v1.7.1
-	github.com/luno/fate v0.0.0-20191017091315-567fa9070f1c
 	github.com/luno/jettison v0.0.0-20230912135954-09d6084f5df9
 	github.com/prometheus/client_golang v1.15.0
 	github.com/prometheus/client_model v0.3.0

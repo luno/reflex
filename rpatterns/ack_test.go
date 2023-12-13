@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/luno/fate"
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rpatterns"
 	"github.com/stretchr/testify/assert"
@@ -44,7 +43,7 @@ func TestAck(t *testing.T) {
 
 			var results []*reflex.Event
 			consumer := rpatterns.NewAckConsumer("test", b,
-				func(ctx context.Context, f fate.Fate, e *rpatterns.AckEvent) error {
+				func(ctx context.Context, e *rpatterns.AckEvent) error {
 					results = append(results, &e.Event)
 					for _, id := range test.acks {
 						if id == e.ID {
@@ -87,7 +86,7 @@ func makeBatcher(cstore reflex.CursorStore) *rpatterns.AckConsumer {
 		batchSize = 2
 	)
 
-	f := func(ctx context.Context, f fate.Fate, e *rpatterns.AckEvent) error {
+	f := func(ctx context.Context, e *rpatterns.AckEvent) error {
 		batch = append(batch, *e)
 
 		if len(batch) >= batchSize {

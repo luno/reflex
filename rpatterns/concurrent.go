@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/luno/fate"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/log"
@@ -106,7 +105,7 @@ func (c *ConcurrentConsumer) Reset() error {
 }
 
 // Consume is used by reflex to feed events into the consumer
-func (c *ConcurrentConsumer) Consume(ctx context.Context, f fate.Fate, e *reflex.Event) error {
+func (c *ConcurrentConsumer) Consume(ctx context.Context, e *reflex.Event) error {
 	// Check if a previous event errored, in which case we need to stop/reset
 	if err := c.getError(); err != nil {
 		return err
@@ -117,7 +116,7 @@ func (c *ConcurrentConsumer) Consume(ctx context.Context, f fate.Fate, e *reflex
 	go func() {
 		defer c.inFlightWait.Done()
 		ret := eventReturn{EventID: e.IDInt()}
-		err := c.consumer.Consume(ctx, f, e)
+		err := c.consumer.Consume(ctx, e)
 		if err != nil {
 			// NoReturnErr: Populate the returned error
 			ret.Err = err

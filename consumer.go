@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/luno/fate"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/luno/reflex/internal/metrics"
@@ -17,7 +16,7 @@ const (
 )
 
 type consumer struct {
-	fn          func(context.Context, fate.Fate, *Event) error
+	fn          func(context.Context, *Event) error
 	name        string
 	lagAlert    time.Duration
 	activityTTL time.Duration
@@ -100,12 +99,12 @@ func WithRecoverFunction(rfn RecoveryFunc) ConsumerOption {
 	}
 }
 
-var defaultRecoveryFunc = func(_ context.Context, _ fate.Fate, _ *Event, _ Consumer, err error) error {
+var defaultRecoveryFunc = func(_ context.Context, _ *Event, _ Consumer, err error) error {
 	return err
 }
 
 // NewConsumer returns a new instrumented consumer of events.
-func NewConsumer(name string, fn func(context.Context, fate.Fate, *Event) error,
+func NewConsumer(name string, fn func(context.Context, *Event) error,
 	opts ...ConsumerOption,
 ) Consumer {
 	ls := metrics.Labels(name)
@@ -136,9 +135,7 @@ func (c *consumer) Name() string {
 	return c.name
 }
 
-func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
-	event *Event,
-) error {
+func (c *consumer) Consume(ctx context.Context, event *Event) error {
 	t0 := time.Now()
 
 	metrics.ConsumerActivityGauge.SetActive(c.activityKey)
@@ -165,9 +162,9 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 		c.errorCounter.Inc()
 		err = asFilterErr(err)
 	} else if ok {
-		err = c.fn(ctx, ft, event)
+		err = c.fn(ctx, event)
 		if err != nil && !IsExpected(err) {
-			err = c.consumeError(ctx, ft, event, err)
+			err = c.consumeError(ctx, event, err)
 		}
 
 		latency := time.Since(t0)
@@ -179,8 +176,8 @@ func (c *consumer) Consume(ctx context.Context, ft fate.Fate,
 	return err
 }
 
-func (c *consumer) consumeError(ctx context.Context, ft fate.Fate, event *Event, err error) error {
-	err = c.rfn(ctx, ft, event, c, err)
+func (c *consumer) consumeError(ctx context.Context, event *Event, err error) error {
+	err = c.rfn(ctx, event, c, err)
 	if err != nil && !IsExpected(err) {
 		c.errorCounter.Inc()
 	}
