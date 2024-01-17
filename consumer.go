@@ -15,8 +15,10 @@ const (
 	defaultActivityTTL = 24 * time.Hour
 )
 
+type ConsumerFunc func(context.Context, *Event) error
+
 type consumer struct {
-	fn          func(context.Context, *Event) error
+	fn          ConsumerFunc
 	name        string
 	lagAlert    time.Duration
 	activityTTL time.Duration
@@ -104,7 +106,7 @@ var defaultRecoveryFunc = func(_ context.Context, _ *Event, _ Consumer, err erro
 }
 
 // NewConsumer returns a new instrumented consumer of events.
-func NewConsumer(name string, fn func(context.Context, *Event) error,
+func NewConsumer(name string, fn ConsumerFunc,
 	opts ...ConsumerOption,
 ) Consumer {
 	ls := metrics.Labels(name)

@@ -128,7 +128,7 @@ func ConsumerShards(name string, n int, opts ...ParallelOption) []ConsumerShard 
 // This reflex.Consumer can be used in reflex.NewSpec to make it runnable.
 func ParallelConsumer(
 	shard ConsumerShard,
-	consume func(context.Context, *reflex.Event) error,
+	consume reflex.ConsumerFunc,
 	opts ...reflex.ConsumerOption,
 ) reflex.Consumer {
 	filteredConsume := func(ctx context.Context, event *reflex.Event) error {
@@ -146,7 +146,7 @@ func ParallelConsumer(
 func ParallelAckConsumer(
 	shard ConsumerShard,
 	store reflex.CursorStore,
-	consume func(context.Context, *AckEvent) error,
+	consume AckConsumerFunc,
 	opts ...reflex.ConsumerOption,
 ) reflex.Consumer {
 	filteredConsume := func(ctx context.Context, event *AckEvent) error {
@@ -165,7 +165,7 @@ func ParallelAckConsumer(
 // See ParallelOption for more details on passing through reflex.ConsumerOption or reflex.StreamOption
 func ParallelSpecs(name string, n int,
 	stream reflex.StreamFunc, store reflex.CursorStore,
-	consume func(context.Context, *reflex.Event) error,
+	consume reflex.ConsumerFunc,
 	opts ...ParallelOption,
 ) []reflex.Spec {
 	var specs []reflex.Spec
@@ -251,12 +251,12 @@ func makeAckConsumer(conf parallelConfig, m, n int, inner AckConsumer) *AckConsu
 		return inner.Consume(ctx, &event.Event)
 	}
 
-	return NewAckConsumer(inner.Name(), inner.cstore, f)
+	return NewAckConsumer(inner.Name(), inner.cStore, f)
 }
 
 type simpleConsumer struct {
 	name      string
-	consumeFn func(ctx context.Context, event *reflex.Event) error
+	consumeFn reflex.ConsumerFunc
 }
 
 func (s simpleConsumer) Name() string {

@@ -56,8 +56,8 @@ type mockTable struct {
 	events []*reflex.Event
 }
 
-func (m *mockTable) Load(ctx context.Context, dbc *sql.DB, prevCursor int64,
-	lag time.Duration,
+func (m *mockTable) Load(_ context.Context, _ *sql.DB, prevCursor int64,
+	_ time.Duration,
 ) ([]*reflex.Event, error) {
 	for i, e := range m.events {
 		if e.IDInt() > prevCursor {
@@ -67,7 +67,7 @@ func (m *mockTable) Load(ctx context.Context, dbc *sql.DB, prevCursor int64,
 	return nil, nil
 }
 
-func (m *mockTable) Insert(ctx context.Context, tx *sql.Tx,
+func (m *mockTable) Insert(_ context.Context, _ *sql.Tx,
 	foreignID string, typ reflex.EventType, metadata []byte,
 ) error {
 	m.events = append(m.events, &reflex.Event{
@@ -77,5 +77,15 @@ func (m *mockTable) Insert(ctx context.Context, tx *sql.Tx,
 		Type:      typ,
 		MetaData:  metadata,
 	})
+	return nil
+}
+
+// mockErrorTable provides a mock in-memory table implementing
+// errorInserter functions
+type mockErrorTable struct{}
+
+func (m *mockErrorTable) errorInserter(_ context.Context,
+	_ *sql.DB, _ string, _ string, _ string, _ reflex.ErrorStatus,
+) error {
 	return nil
 }

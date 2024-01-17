@@ -76,6 +76,12 @@ var (
 	}, []string{consumerLabel})
 
 	// ConsumerSkippedEvents is the number of events skipped by consumer
+	ConsumerDeadLetteredEvents = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "reflex_consumer_dead_lettered_events_count",
+		Help: "Number of events dead lettered by consumer",
+	}, []string{consumerLabel})
+
+	// ConsumerSkippedEvents is the number of events skipped by consumer
 	ConsumerSkippedEvents = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "reflex_consumer_skipped_events_count",
 		Help: "Number of events skipped by consumer",
@@ -90,6 +96,7 @@ func init() {
 		ConsumerActivityGauge,
 		ConsumerLatency,
 		ConsumerErrors,
+		ConsumerDeadLetteredEvents,
 		ConsumerSkippedEvents,
 	)
 }

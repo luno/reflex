@@ -13,10 +13,11 @@ import (
 // NewBestEffortConsumer returns a reflex consumer that ignores errors
 // after the provided number of retries and therefore eventually
 // continues to the next event.
-func NewBestEffortConsumer(name string, retries int, fn func(context.Context, *reflex.Event) error,
+func NewBestEffortConsumer(name string, retries int, fn reflex.ConsumerFunc,
 	opts ...reflex.ConsumerOption,
 ) reflex.Consumer {
 	be := &bestEffort{
+		name:    name,
 		inner:   fn,
 		retries: retries,
 	}
@@ -25,9 +26,10 @@ func NewBestEffortConsumer(name string, retries int, fn func(context.Context, *r
 }
 
 type bestEffort struct {
-	inner      func(context.Context, *reflex.Event) error
-	retries    int
-	name       string
+	name    string
+	inner   reflex.ConsumerFunc
+	retries int
+
 	retryID    string
 	retryCount int
 }

@@ -16,9 +16,9 @@ import (
 func Run(in context.Context, s Spec) error {
 	ctx, cancel := context.WithCancel(in)
 	defer cancel()
-	defer s.cstore.Flush(context.Background()) // best effort flush with new context
+	defer func() { _ = s.cStore.Flush(context.Background()) }() // best effort flush with new context
 
-	cursor, err := s.cstore.GetCursor(ctx, s.consumer.Name())
+	cursor, err := s.cStore.GetCursor(ctx, s.consumer.Name())
 	if err != nil {
 		return errors.Wrap(err, "get cursor error")
 	}
@@ -60,7 +60,7 @@ func Run(in context.Context, s Spec) error {
 
 	// Check if the stream client is a closer.
 	if closer, ok := sc.(io.Closer); ok {
-		defer closer.Close()
+		defer func() { _ = closer.Close() }()
 	}
 
 	for {
@@ -94,7 +94,7 @@ func Run(in context.Context, s Spec) error {
 			})
 		}
 
-		if err := s.cstore.SetCursor(ctx, s.consumer.Name(), e.ID); err != nil {
+		if err := s.cStore.SetCursor(ctx, s.consumer.Name(), e.ID); err != nil {
 			return errors.Wrap(err, "set cursor error", j.MKS{
 				"consumer":  s.consumer.Name(),
 				"event_id":  e.ID,

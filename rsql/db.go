@@ -3,6 +3,7 @@ package rsql
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -22,6 +23,14 @@ const (
 	defaultEventForeignIDField = "foreign_id"
 	defaultMetadataField       = "" // disabled
 	defaultTraceField          = "" // default is empty to support backwards compatibility
+
+	defaultErrorTable              = "consumer_errors"
+	defaultErrorIDField            = "id"
+	defaultErrorEventConsumerField = "consumer"
+	defaultErrorEventIDField       = "event_id"
+	defaultErrorMsgField           = "error_msg"
+	defaultErrorTimeField          = "timestamp"
+	defaultErrorStatusField        = "status"
 )
 
 // eventType is the rsql internal implementation of EventType interface.
@@ -32,7 +41,7 @@ func (t eventType) ReflexType() int {
 }
 
 // makeDefaultInserter returns the default sql inserter configured via WithEventsXField options.
-func makeDefaultInserter(schema etableSchema) inserter {
+func makeDefaultInserter(schema eTableSchema) inserter {
 	return func(ctx context.Context, tx *sql.Tx,
 		foreignID string, typ reflex.EventType, metadata []byte,
 	) error {
@@ -82,16 +91,17 @@ func scan(row row) (*reflex.Event, error) {
 	return &e, err
 }
 
-func getLatestID(ctx context.Context, dbc *sql.DB, schema etableSchema) (int64, error) {
+func getLatestID(ctx context.Context, dbc *sql.DB, schema eTableSchema) (int64, error) {
 	var id sql.NullInt64
-	err := dbc.QueryRowContext(ctx, "select max("+schema.idField+") from "+schema.name).Scan(&id)
+	q := fmt.Sprintf("select max(%s) from %s", schema.idField, schema.name)
+	err := dbc.QueryRowContext(ctx, q).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
 	return id.Int64, nil
 }
 
-func getNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
+func getNextEvents(ctx context.Context, dbc *sql.DB, schema eTableSchema,
 	after int64, lag time.Duration,
 ) ([]*reflex.Event, error) {
 	var (
@@ -127,7 +137,9 @@ func getNextEvents(ctx context.Context, dbc *sql.DB, schema etableSchema,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var el []*reflex.Event
 	for rows.Next() {
@@ -149,11 +161,11 @@ func GetNextEventsForTesting(ctx context.Context, _ *testing.T, dbc *sql.DB, tab
 
 // GetLatestIDForTesting fetches the latest event id from the event table
 func GetLatestIDForTesting(ctx context.Context, _ *testing.T, dbc *sql.DB, eventTable, idField string) (int64, error) {
-	return getLatestID(ctx, dbc, etableSchema{name: eventTable, idField: idField})
+	return getLatestID(ctx, dbc, eTableSchema{name: eventTable, idField: idField})
 }
 
 // isMySQLErrCantWrite returns true if the error is due to not being able to write
-// in this DB instace.
+// in this DB instance.
 func isMySQLErrCantWrite(err error) bool {
 	return isMySQLErrReadOnly(err) || isMySQLErrNoAccess(err)
 }
@@ -253,4 +265,28 @@ func setCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema,
 	}
 
 	return nil
+}
+
+// makeDefaultErrorInserter returns the default sql ErrorInsertFunc configured via WithErrorsXField options.
+func makeDefaultErrorInserter(schema errTableSchema) errorInserter {
+	q := fmt.Sprintf(
+		"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=?",
+		schema.name, schema.eventConsumerField, schema.eventIDField, schema.errorMsgField, schema.errorTimeField, schema.errorStatusField)
+	return func(ctx context.Context, dbc *sql.DB, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus,
+	) error {
+		_, err := dbc.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
+		// If the error has already been written then we can ignore the error
+		if IsDuplicateErrorInsertion(err) {
+			return nil
+		}
+		return errors.Wrap(err, "insert consumer error failed")
+	}
+}
+
+func IsDuplicateErrorInsertion(err error) bool {
+	return isMySQLErrDupEntry(err)
+}
+
+func quoted(name string) string {
+	return fmt.Sprintf("`%s`", name)
 }

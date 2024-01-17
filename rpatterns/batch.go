@@ -246,7 +246,7 @@ func NewBatchSpec(
 		stop:     bc.Stop,
 	}
 
-	return reflex.NewSpec(stream, &noSetStore{bc.cstore}, c, opts...)
+	return reflex.NewSpec(stream, &noSetStore{bc.cStore}, c, opts...)
 }
 
 type resetConsumer struct {

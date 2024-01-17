@@ -37,13 +37,13 @@ func FillGaps(dbc *sql.DB, gapTable gapTable) {
 // defining the subset of methods required for gap filling.
 type gapTable interface {
 	ListenGaps(f func(Gap))
-	getSchema() etableSchema
+	getSchema() eTableSchema
 }
 
 // makeFill returns a fill function that ensures that rows exist
 // with the ids indicated by the Gap. It does so by either detecting
 // existing rows or by inserting noop events. It is idempotent.
-func makeFill(dbc *sql.DB, schema etableSchema) func(Gap) {
+func makeFill(dbc *sql.DB, schema eTableSchema) func(Gap) {
 	return func(gap Gap) {
 		ctx := context.Background()
 		for i := gap.Prev + 1; i < gap.Next; i++ {
@@ -59,7 +59,7 @@ func makeFill(dbc *sql.DB, schema etableSchema) func(Gap) {
 
 // fillGap blocks until an event with id exists (committed) in the table or if it
 // could insert a noop event with that id.
-func fillGap(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64) error {
+func fillGap(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64) error {
 	// Wait until the event is committed.
 	committed, err := waitCommitted(ctx, dbc, schema, id)
 	if err != nil {
@@ -85,7 +85,7 @@ func fillGap(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64) er
 	return nil
 }
 
-func exists(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64,
+func exists(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64,
 	level sql.IsolationLevel,
 ) (bool, error) {
 	tx, err := dbc.BeginTx(ctx, &sql.TxOptions{Isolation: level})
@@ -105,7 +105,7 @@ func exists(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64,
 
 // waitCommitted blocks while an uncommitted event with id exists and returns true once
 // it is committed or false if it is rolled back or there is no uncommitted event at all.
-func waitCommitted(ctx context.Context, dbc *sql.DB, schema etableSchema, id int64) (bool, error) {
+func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64) (bool, error) {
 	for {
 		uncommitted, err := exists(ctx, dbc, schema, id, sql.LevelReadUncommitted)
 		if err != nil {

@@ -18,7 +18,7 @@ import (
 
 // NewServer starts and returns a reflex server and its address.
 func NewServer(_ testing.TB, stream reflex.StreamFunc,
-	cstore reflex.CursorStore,
+	cStore reflex.CursorStore,
 ) (*Server, string) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -31,7 +31,7 @@ func NewServer(_ testing.TB, stream reflex.StreamFunc,
 
 	srv := &Server{
 		stream:      stream,
-		cstore:      cstore,
+		cstore:      cStore,
 		grpcServer:  grpcServer,
 		rserver:     reflex.NewServer(),
 		sentCounter: prometheus.NewCounter(prometheus.CounterOpts{Name: "sent_total"}),

@@ -22,7 +22,7 @@ type loader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 // as cursors, so supporting cursor override when no events are returned
 // allows skipping ranges of noops events.
 //
-// Loaders are layered as follows in streamclient.Recv (from outer to inner):
+// Loaders are layered as follows in streamClient.Recv (from outer to inner):
 //
 //	noopFilter         (filterLoader)
 //	rCache (if enable) (loader)
@@ -35,7 +35,7 @@ type filterLoader func(ctx context.Context, dbc *sql.DB, prevCursor int64,
 
 // makeBaseLoader returns the default base loader that queries the sql for next events.
 // This loader can be replaced with the WithBaseLoader option.
-func makeBaseLoader(schema etableSchema) loader {
+func makeBaseLoader(schema eTableSchema) loader {
 	return func(ctx context.Context, dbc *sql.DB,
 		prevCursor int64, lag time.Duration,
 	) ([]*reflex.Event, error) {

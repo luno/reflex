@@ -56,7 +56,7 @@ func IsType(source, target EventType) bool {
 // IsAnyType returns true if the source reflex type equals any of the target types.
 func IsAnyType(source EventType, targets ...EventType) bool {
 	for _, target := range targets {
-		if source.ReflexType() == target.ReflexType() {
+		if IsType(source, target) {
 			return true
 		}
 	}
@@ -77,7 +77,7 @@ func (t eventType) ReflexType() int {
 // guaranteed at-least-once delivery of all events in the stream.
 type Spec struct {
 	stream   StreamFunc
-	cstore   CursorStore
+	cStore   CursorStore
 	consumer Consumer
 	opts     []StreamOption
 }
@@ -96,12 +96,12 @@ func (req Spec) Stop() error {
 }
 
 // NewSpec returns a new Spec.
-func NewSpec(stream StreamFunc, cstore CursorStore, consumer Consumer,
+func NewSpec(stream StreamFunc, cStore CursorStore, consumer Consumer,
 	opts ...StreamOption,
 ) Spec {
 	return Spec{
 		stream:   stream,
-		cstore:   cstore,
+		cStore:   cStore,
 		consumer: consumer,
 		opts:     opts,
 	}
@@ -122,7 +122,7 @@ type resetter interface {
 }
 
 // ResetterCtx is an optional interface that a consumer can implement indicating
-// that it is stateful and requires reset at the start of each Run.
+// that it is stateful and requires resetting at the start of each Run.
 type ResetterCtx interface {
 	Reset(context.Context) error
 }
@@ -178,3 +178,14 @@ type CursorStore interface {
 // return nil to "recover" from the error (additional work may obviously be needed to do any actual
 // recovery), return the same error if it could not be handled or even return a different error.
 type RecoveryFunc func(context.Context, *Event, Consumer, error) error
+
+// ErrorInsertFunc abstracts the insertion of an event into a sql table.
+type ErrorInsertFunc func(ctx context.Context, consumer string, eventID string, errMsg string) error
+
+type ErrorStatus int
+
+const (
+	UnknownEventError  ErrorStatus = 0
+	SavedEventError    ErrorStatus = 1
+	SentinelEventError             = 2
+)

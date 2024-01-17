@@ -20,7 +20,7 @@ const (
 // NewEventsTable returns a new events table.
 func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	table := &EventsTable{
-		schema: etableSchema{
+		schema: eTableSchema{
 			name:           name,
 			idField:        defaultEventIDField,
 			timeField:      defaultEventTimeField,
@@ -182,7 +182,7 @@ type inserter func(ctx context.Context, tx *sql.Tx,
 type EventsTable struct {
 	options
 	config            []EventsOption
-	schema            etableSchema
+	schema            eTableSchema
 	disableCache      bool
 	includeNoopEvents bool
 	baseLoader        loader
@@ -199,7 +199,7 @@ type EventsTable struct {
 // can be optionally called to notify the table's EventNotifier of the change.
 // The intended pattern for this function is:
 //
-//	notify, err := etable.Insert(ctx, tx, ...)
+//	notify, err := eTable.Insert(ctx, tx, ...)
 //	if err != nil {
 //	  return err
 //	}
@@ -241,7 +241,7 @@ func (t *EventsTable) Clone(opts ...EventsOption) *EventsTable {
 func (t *EventsTable) Stream(ctx context.Context, dbc *sql.DB, after string,
 	opts ...reflex.StreamOption,
 ) reflex.StreamClient {
-	sc := &streamclient{
+	sc := &streamClient{
 		schema:  t.schema,
 		after:   after,
 		dbc:     dbc,
@@ -290,12 +290,12 @@ func (t *EventsTable) ListenGaps(f func(Gap)) {
 }
 
 // getSchema returns the table schema and implements the gapTable interface for FillGaps.
-func (t *EventsTable) getSchema() etableSchema {
+func (t *EventsTable) getSchema() eTableSchema {
 	return t.schema
 }
 
 // buildLoader returns a new layered event loader.
-func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema etableSchema, withNoopEvents bool) filterLoader {
+func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema eTableSchema, withNoopEvents bool) filterLoader {
 	if baseLoader == nil {
 		baseLoader = makeBaseLoader(schema)
 	}
@@ -310,7 +310,7 @@ func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema eta
 	return wrapFilter(loader)
 }
 
-// options define config/state defined in EventsTable used by the streamclients.
+// options define config/state defined in EventsTable used by a streamClient.
 type options struct {
 	reflex.StreamOptions
 
@@ -318,8 +318,8 @@ type options struct {
 	backoff  time.Duration
 }
 
-// etableSchema defines the mysql schema of an events table.
-type etableSchema struct {
+// eTableSchema defines the mysql schema of an events table.
+type eTableSchema struct {
 	name           string
 	idField        string
 	timeField      string
@@ -329,10 +329,10 @@ type etableSchema struct {
 	traceField     string
 }
 
-type streamclient struct {
+type streamClient struct {
 	options
 
-	schema     etableSchema
+	schema     eTableSchema
 	after      string
 	prev       int64 // Previous (current) cursor.
 	buf        []*reflex.Event
@@ -349,7 +349,7 @@ type streamclient struct {
 // event and returns it. When querying and no new events are found it backs off
 // before retrying. It blocks until it can return a non-nil event or an error.
 // It is only safe for a single goroutine to call Recv.
-func (s *streamclient) Recv() (*reflex.Event, error) {
+func (s *streamClient) Recv() (*reflex.Event, error) {
 	if err := s.ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -426,7 +426,7 @@ func (s *streamclient) Recv() (*reflex.Event, error) {
 	return e, nil
 }
 
-func (s *streamclient) wait(d time.Duration) error {
+func (s *streamClient) wait(d time.Duration) error {
 	if d == 0 {
 		return nil
 	} else if s.notifyChan == nil {
