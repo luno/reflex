@@ -54,7 +54,7 @@ func TestStream(t *testing.T) {
 				rsql.WithEventsLoader(mock.Load),
 			}, []rsql.ErrorsOption{
 				rsql.WithErrorInserter(mockError.errorInserter),
-			}, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+			}, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 			defer s.stop()
 
 			// Skip 0 since that results in noop event.
@@ -106,7 +106,7 @@ func TestConsumeStreamClient(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			s := setupState(t, nil, nil, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+			s := setupState(t, nil, nil, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 			defer s.stop()
 
 			for _, e := range test.events {
@@ -164,7 +164,7 @@ func TestStreamClientErrors(t *testing.T) {
 		rsql.WithEventsLoader(mock.Load),
 	}, []rsql.ErrorsOption{
 		rsql.WithErrorInserter(mockError.errorInserter),
-	}, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	}, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 	defer s.stop()
 
 	// Skip 0 since it is a noop.
@@ -236,6 +236,7 @@ func TestConsumeStreamLag(t *testing.T) {
 		DefaultEventTable(),
 		DefaultCursorTable(),
 		DefaultErrorTable(),
+		DefaultErrorEventTable(),
 	)
 	defer s.stop()
 
@@ -290,7 +291,7 @@ func TestConsumeStreamLag(t *testing.T) {
 func TestStreamFromHead(t *testing.T) {
 	notifier := new(mockNotifier)
 	s := setupState(t, nil,
-		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)}, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)}, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 	defer s.stop()
 
 	prefill := 10
@@ -348,7 +349,7 @@ func TestStreamFromHead(t *testing.T) {
 func TestStreamToHead(t *testing.T) {
 	notifier := new(mockNotifier)
 	s := setupState(t, nil,
-		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)}, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+		[]rsql.EventsOption{rsql.WithEventsNotifier(notifier)}, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 	defer s.stop()
 
 	assertCount := func(t *testing.T, after string, n, offset int) {
@@ -404,7 +405,7 @@ func TestStreamMetadata(t *testing.T) {
 	ev := DefaultEventTable()
 	ev.MetadataField = "metadata"
 	s := setupState(t, nil,
-		[]rsql.EventsOption{rsql.WithEventMetadataField(ev.MetadataField)}, nil, ev, DefaultCursorTable(), DefaultErrorTable())
+		[]rsql.EventsOption{rsql.WithEventMetadataField(ev.MetadataField)}, nil, ev, DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 	defer s.stop()
 
 	prefill := 10
@@ -461,7 +462,7 @@ func TestStreamLag(t *testing.T) {
 			rsql.WithEventsLoader(loader),
 			rsql.WithEventsNotifier(notifier),
 			rsql.WithEventsBackoff(time.Hour), // Manual control on sleep.
-		}, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+		}, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 	defer s.stop()
 
 	table = s.eTable
@@ -539,7 +540,7 @@ func TestStreamLagNoCache(t *testing.T) {
 			rsql.WithoutEventsCache(),
 			rsql.WithEventsNotifier(notifier),
 			rsql.WithEventsBackoff(time.Hour), // Manual control on sleep.
-		}, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+		}, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 	defer s.stop()
 
 	table = s.eTable
@@ -599,7 +600,7 @@ func TestStreamLagNoCache(t *testing.T) {
 }
 
 func TestCancelError(t *testing.T) {
-	s := setupState(t, nil, nil, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	s := setupState(t, nil, nil, nil, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 	defer s.stop()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -625,9 +626,10 @@ type testState struct {
 }
 
 func setupState(t *testing.T, streamOptions []reflex.StreamOption,
-	eventOptions []rsql.EventsOption, _ []rsql.ErrorsOption, ev EventTableSchema, crs CursorTableSchema, ers ErrorTableSchema,
+	eventOptions []rsql.EventsOption, _ []rsql.ErrorsOption, ev EventTableSchema, crs CursorTableSchema,
+	ers ErrorTableSchema, ees EventTableSchema,
 ) *testState {
-	dbc := ConnectTestDB(t, ev, crs, ers)
+	dbc := ConnectTestDB(t, ev, crs, ers, ees)
 	eTable := rsql.NewEventsTable(eventsTable, eventOptions...)
 	cTable := rsql.NewCursorsTable(cursorsTable, rsql.WithCursorAsyncPeriod(time.Minute)) // require flush
 	srv, url := grpctest.NewServer(t, eTable.ToStream(dbc, streamOptions...), cTable.ToStore(dbc))

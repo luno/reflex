@@ -20,9 +20,10 @@ import (
 var dbTestURI = flag.String("db_test_uri", getDefaultURI(), "Test database uri")
 
 const (
-	eventsTable  = "events"
-	cursorsTable = "cursors"
-	errorsTable  = "consumer_errors"
+	eventsTable      = "events"
+	cursorsTable     = "cursors"
+	errorsTable      = "consumer_errors"
+	errorEventsTable = "consumer_errors_events"
 )
 
 type EventTableSchema struct {
@@ -186,8 +187,19 @@ func DefaultErrorTable() ErrorTableSchema {
 	}
 }
 
+func DefaultErrorEventTable() EventTableSchema {
+	return EventTableSchema{
+		Name:           errorEventsTable,
+		IDField:        "id",
+		TimeField:      "timestamp",
+		TypeField:      "type",
+		ForeignIDField: "foreign_id",
+		MetadataField:  "metadata",
+	}
+}
+
 // ConnectTestDB returns a db connection with non-temporary DB tables that support multiple connections.
-func ConnectTestDB(t *testing.T, ev EventTableSchema, cursor CursorTableSchema, er ErrorTableSchema) *sql.DB {
+func ConnectTestDB(t *testing.T, ev EventTableSchema, cursor CursorTableSchema, er ErrorTableSchema, ee EventTableSchema) *sql.DB {
 	admin, err := sql.Open("mysql", *dbTestURI)
 	jtest.RequireNil(t, err)
 
@@ -216,6 +228,7 @@ func ConnectTestDB(t *testing.T, ev EventTableSchema, cursor CursorTableSchema, 
 	ev.CreateTable(t, dbc)
 	cursor.CreateTable(t, dbc)
 	er.CreateTable(t, dbc)
+	ee.CreateTable(t, dbc)
 
 	dbc.SetMaxOpenConns(10)
 	_, err = dbc.Exec("set time_zone='+00:00';")
@@ -243,7 +256,7 @@ func getSocketFile() string {
 }
 
 func TestGetNextEventNoRows(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	table := rsql.NewEventsTable(eventsTable)
 
@@ -253,7 +266,7 @@ func TestGetNextEventNoRows(t *testing.T) {
 }
 
 func TestStreamRecv(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	table := rsql.NewEventsTable("events")
 
@@ -277,7 +290,7 @@ func TestStreamRecv(t *testing.T) {
 }
 
 func TestGetLatestID(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	id, err := rsql.GetLatestIDForTesting(context.Background(), t, dbc, "events", "id")
 	assert.NoError(t, err)
@@ -297,7 +310,7 @@ func TestGetLatestID(t *testing.T) {
 func TestCursorTableInt(t *testing.T) {
 	const id = "test"
 
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	ctable := rsql.NewCursorsTable(cursorsTable, rsql.WithCursorAsyncDisabled())
 
@@ -336,7 +349,7 @@ func TestCursorTableString(t *testing.T) {
 	cursors.CursorType = "varchar(255)"
 
 	const id = "test"
-	dbc := ConnectTestDB(t, DefaultEventTable(), cursors, DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), cursors, DefaultErrorTable(), DefaultErrorEventTable())
 
 	ctable := rsql.NewCursorsTable(cursorsTable,
 		rsql.WithCursorAsyncDisabled(), rsql.WithCursorStrings())
@@ -371,7 +384,7 @@ func TestCursorTableStringWithInts(t *testing.T) {
 	const id = "test"
 	cursors := DefaultCursorTable()
 	cursors.CursorType = "varchar(255)"
-	dbc := ConnectTestDB(t, DefaultEventTable(), cursors, DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), cursors, DefaultErrorTable(), DefaultErrorEventTable())
 
 	ctable := rsql.NewCursorsTable(cursorsTable,
 		rsql.WithCursorAsyncDisabled())
@@ -403,7 +416,7 @@ func TestCursorTableStringWithInts(t *testing.T) {
 }
 
 func TestSetCursorBack(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	ctable := rsql.NewCursorsTable(cursorsTable, rsql.WithCursorAsyncDisabled())
 

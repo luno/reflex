@@ -51,7 +51,7 @@ func TestNewCursorsTable(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+			dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 			var sets int
 
@@ -87,7 +87,7 @@ func TestNewCursorsTable(t *testing.T) {
 }
 
 func TestAsyncSetCursor(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	s := newTestSleep()
 
@@ -120,7 +120,7 @@ func TestAsyncSetCursor(t *testing.T) {
 }
 
 func TestSyncSetCursor(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	s := newTestSleep()
 
@@ -142,7 +142,7 @@ func TestSyncSetCursor(t *testing.T) {
 }
 
 func TestCloneAsyncCursor(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	s := newTestSleep()
 

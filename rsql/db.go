@@ -25,6 +25,8 @@ const (
 	defaultTraceField          = "" // default is empty to support backwards compatibility
 
 	defaultErrorTable              = "consumer_errors"
+	defaultErrorEventsSuffix       = "_events"
+	defaultErrorEventMetadataField = "metadata"
 	defaultErrorIDField            = "id"
 	defaultErrorEventConsumerField = "consumer"
 	defaultErrorEventIDField       = "event_id"
@@ -268,18 +270,35 @@ func setCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema,
 }
 
 // makeDefaultErrorInserter returns the default sql ErrorInsertFunc configured via WithErrorsXField options.
-func makeDefaultErrorInserter(schema errTableSchema) errorInserter {
+func makeDefaultErrorInserter(schema errTableSchema) ErrorInserter {
+	msg := "insert consumer error failed"
+	// TODO(jkilloran): Should we also reset the status to be 1 i.e. EventErrorRecorded status even if it has previously
+	//                  been handled/updated to another state. Or should we return any duplicate error in a way so we
+	//                  don't write another event off of the same error. Or indeed is it safer as currently written when
+	//                  encountering a duplicate error to still write a new event off of it but not to revert the status
+	//                  back to recorded.
+
+	// NOTE: This insert statement will return the generated autoincrement "id" column value if no (secondary) key is
+	//       already found in the table (i.e. something like consumer + event_id) otherwise it will do a non-op update
+	//       but due to the use of last_insert_id(id) it will still pass the existing row's "id" column back as if it
+	//       was just inserted ensuring that it always returns a reasonable value.
+	// NB: See the documentation is the following link on the behaviour of "on duplicate key update" https://dev.mysql.com/doc/refman/5.7/en/insert-on-duplicate.html#:~:text=KEY%20UPDATE%20Statement-,13.2.5.2,-INSERT%20...%20ON%20DUPLICATE
+	// NB: See the documentation is the following link on the behaviour of "on last_insert_id(<expr>)" https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_last-insert-id
 	q := fmt.Sprintf(
-		"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=?",
-		schema.name, schema.eventConsumerField, schema.eventIDField, schema.errorMsgField, schema.errorTimeField, schema.errorStatusField)
-	return func(ctx context.Context, dbc *sql.DB, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus,
-	) error {
-		_, err := dbc.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
+		"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=? on duplicate key update %s=last_insert_id(%s)",
+		schema.name, schema.eventConsumerField, schema.eventIDField, schema.errorMsgField, schema.errorTimeField, schema.errorStatusField, schema.idField, schema.idField)
+	return func(ctx context.Context, tx *sql.Tx, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus) (string, error) {
+		r, err := tx.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
 		// If the error has already been written then we can ignore the error
-		if IsDuplicateErrorInsertion(err) {
-			return nil
+		if err != nil && !IsDuplicateErrorInsertion(err) {
+			return "", errors.Wrap(err, msg)
 		}
-		return errors.Wrap(err, "insert consumer error failed")
+		// This will still work with a duplicate due the "on duplicate key update id" part of the insert statement above
+		id, idErr := r.LastInsertId()
+		if idErr != nil {
+			return "", errors.Wrap(idErr, msg)
+		}
+		return strconv.FormatInt(id, 10), nil
 	}
 }
 

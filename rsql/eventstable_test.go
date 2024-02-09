@@ -27,7 +27,7 @@ func TestWithIncludeNoopEvents(t *testing.T) {
 		rsql.WithIncludeNoopEvents(),
 	)
 
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	rsql.FillGaps(dbc, table)
 
@@ -64,7 +64,7 @@ func TestWithIncludeNoopEvents(t *testing.T) {
 func TestGapRollbackDetection(t *testing.T) {
 	table := rsql.NewEventsTable(eventsTable, rsql.WithEventsBackoff(time.Millisecond))
 
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	rsql.FillGaps(dbc, table)
 
@@ -107,7 +107,7 @@ func TestGapRollbackDetection(t *testing.T) {
 func TestGapCommitDetection(t *testing.T) {
 	table := rsql.NewEventsTable(eventsTable, rsql.WithEventsBackoff(time.Millisecond))
 
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	// Insert 1
 	err := insertTestEvent(dbc, table, i2s(1), testEventType(1))
@@ -148,7 +148,7 @@ func TestGapCommitDetection(t *testing.T) {
 func TestNoDeadlockGap(t *testing.T) {
 	table := rsql.NewEventsTable(eventsTable, rsql.WithEventsBackoff(time.Millisecond))
 
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	rsql.FillGaps(dbc, table)
 
@@ -238,7 +238,7 @@ func TestEventsTable(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+			dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 			table := rsql.NewEventsTable(eventsTable, rsql.WithEventsBackoff(time.Hour))
 
@@ -281,7 +281,7 @@ func TestEventsTable(t *testing.T) {
 }
 
 func TestInsertNoop(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	table := rsql.NewEventsTable(eventsTable)
 	err := insertTestEvent(dbc, table, i2s(0), testEventType(0))
@@ -289,7 +289,7 @@ func TestInsertNoop(t *testing.T) {
 }
 
 func TestNoGapFill(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	notifier := new(mockNotifier)
 
@@ -339,7 +339,7 @@ func TestNoGapFill(t *testing.T) {
 func TestDoubleGap(t *testing.T) {
 	table := rsql.NewEventsTable(eventsTable, rsql.WithEventsBackoff(time.Millisecond))
 
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	rsql.FillGaps(dbc, table)
 
@@ -386,7 +386,7 @@ func TestDoubleGap(t *testing.T) {
 func TestRandomGaps(t *testing.T) {
 	table := rsql.NewEventsTable(eventsTable, rsql.WithEventsBackoff(time.Millisecond))
 
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	rsql.FillGaps(dbc, table)
 
@@ -446,7 +446,7 @@ func TestRandomGaps(t *testing.T) {
 }
 
 func TestNoMetadata(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	table := rsql.NewEventsTable(eventsTable)
 
@@ -458,7 +458,7 @@ func TestNoMetadata(t *testing.T) {
 func TestMetadata(t *testing.T) {
 	ev := DefaultEventTable()
 	ev.MetadataField = "metadata"
-	dbc := ConnectTestDB(t, ev, DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, ev, DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	table := rsql.NewEventsTable(eventsTable, rsql.WithEventMetadataField(ev.MetadataField))
 
@@ -488,7 +488,7 @@ func TestMetadata(t *testing.T) {
 }
 
 func TestInMemNotifier(t *testing.T) {
-	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable())
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 
 	table := rsql.NewEventsTable(eventsTable,
 		rsql.WithEventsInMemNotifier(),

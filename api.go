@@ -179,13 +179,29 @@ type CursorStore interface {
 // recovery), return the same error if it could not be handled or even return a different error.
 type RecoveryFunc func(context.Context, *Event, Consumer, error) error
 
-// ErrorInsertFunc abstracts the insertion of an event into a sql table.
-type ErrorInsertFunc func(ctx context.Context, consumer string, eventID string, errMsg string) error
+// ConsumerError is record of record reflex event consumer errors.
+type ConsumerError struct {
+	ID        string
+	Consumer  string
+	EventID   string
+	Message   string
+	Timestamp time.Time
+	Status    ErrorStatus
+}
 
+// ErrorStatus is the current status of a consumer error.
 type ErrorStatus int
 
+func (e ErrorStatus) ReflexType() int {
+	return int(e)
+}
+
+func (e ErrorStatus) ShiftStatus() int {
+	return e.ReflexType()
+}
+
 const (
-	UnknownEventError  ErrorStatus = 0
-	SavedEventError    ErrorStatus = 1
-	SentinelEventError             = 2
+	UnknownEventError ErrorStatus = 0
+	// EventErrorRecorded - New errors should be saved in this state [initial]
+	EventErrorRecorded ErrorStatus = 1
 )

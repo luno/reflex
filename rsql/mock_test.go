@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -81,11 +82,14 @@ func (m *mockTable) Insert(_ context.Context, _ *sql.Tx,
 }
 
 // mockErrorTable provides a mock in-memory table implementing
-// errorInserter functions
-type mockErrorTable struct{}
+// ErrorInserter functions
+type mockErrorTable struct {
+	id int64
+}
 
 func (m *mockErrorTable) errorInserter(_ context.Context,
-	_ *sql.DB, _ string, _ string, _ string, _ reflex.ErrorStatus,
-) error {
-	return nil
+	_ *sql.Tx, _, _, _ string, _ reflex.ErrorStatus,
+) (string, error) {
+	m.id++
+	return strconv.FormatInt(m.id, 10), nil
 }
