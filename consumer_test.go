@@ -404,3 +404,9 @@ func TestConsumeWithErrorAndReporting(t *testing.T) {
 		})
 	}
 }
+
+func TestWithConsumerActivityTTLFunc(t *testing.T) {
+	c := new(consumer)
+	WithConsumerActivityTTLFunc(func() time.Duration { return time.Hour })(c)
+	require.Equal(t, time.Hour, c.activityTTL)
+}

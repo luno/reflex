@@ -69,6 +69,14 @@ func WithConsumerActivityTTL(ttl time.Duration) ConsumerOption {
 	}
 }
 
+// WithConsumerActivityTTLFunc is similar to WithConsumerActivityTTL but accepts
+// a function that returns the TTL.
+func WithConsumerActivityTTLFunc(ttl func() time.Duration) ConsumerOption {
+	return func(c *consumer) {
+		c.activityTTL = ttl()
+	}
+}
+
 // WithoutConsumerActivityTTL provides an option to disable the consumer activity metric ttl.
 func WithoutConsumerActivityTTL() ConsumerOption {
 	return func(c *consumer) {
