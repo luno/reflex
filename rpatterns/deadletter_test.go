@@ -4,17 +4,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/luno/jettison/jtest"
-
 	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/j"
+	"github.com/luno/jettison/jtest"
+	"github.com/stretchr/testify/require"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rpatterns"
-	"github.com/stretchr/testify/require"
 )
 
 var (
-	consumerErr   = errors.New("consumer error")
-	deadLetterErr = errors.New("dead letter error")
+	consumerErr   = errors.New("consumer error", j.C("ERR_e6ccc30ee4129ce0"))
+	deadLetterErr = errors.New("dead letter error", j.C("ERR_aae2d44781ddf002"))
 )
 
 func makeExpected(size int) []string {
@@ -92,10 +93,9 @@ func TestDeadLetterConsumer(t *testing.T) {
 			errorsPerEvent: 4,
 			retries:        2,
 			ids:            []int{1, 1, 1, 2, 2, 2},
-			// expected:       makeExpected(2),
-			consumeErr: consumerErr,
-			writeErr:   deadLetterErr,
-			expErr:     []error{consumerErr, consumerErr, consumerErr, consumerErr, consumerErr, consumerErr},
+			consumeErr:     consumerErr,
+			writeErr:       deadLetterErr,
+			expErr:         []error{consumerErr, consumerErr, consumerErr, consumerErr, consumerErr, consumerErr},
 		},
 		{
 			name:           "3 retries 2 errors",
@@ -128,7 +128,7 @@ func TestDeadLetterConsumer(t *testing.T) {
 			}
 
 			var actual []string
-			eFn := func(ctx context.Context, consumer string, eventID string, errMsg string) error {
+			eFn := func(ctx context.Context, consumerName string, eventID string, errMsg string) error {
 				if test.writeErr == nil {
 					actual = append(actual, errMsg)
 				}

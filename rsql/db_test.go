@@ -116,7 +116,8 @@ type ErrorTableSchema struct {
 	ConsumerField    string
 	EventIDField     string
 	ErrorMsgField    string
-	TimeField        string
+	CreatedAtField   string
+	UpdatedAtField   string
 	ErrorStatusField string
 }
 
@@ -132,6 +133,7 @@ func (s ErrorTableSchema) CreateTable(t *testing.T, dbc *sql.DB) {
 	%s bigint not null,
     %s text not null,
 	%s datetime not null,
+	%s datetime not null,
     %s int not null,
 
 	primary key (%s),
@@ -142,7 +144,8 @@ func (s ErrorTableSchema) CreateTable(t *testing.T, dbc *sql.DB) {
 		s.ConsumerField,
 		s.EventIDField,
 		s.ErrorMsgField,
-		s.TimeField,
+		s.CreatedAtField,
+		s.UpdatedAtField,
 		s.ErrorStatusField,
 		s.IDField,
 		s.ConsumerField,
@@ -182,8 +185,9 @@ func DefaultErrorTable() ErrorTableSchema {
 		ConsumerField:    quoted("consumer"),
 		EventIDField:     quoted("event_id"),
 		ErrorMsgField:    quoted("error_msg"),
-		TimeField:        quoted("timestamp"),
-		ErrorStatusField: quoted("status"),
+		CreatedAtField:   quoted("created_at"),
+		UpdatedAtField:   quoted("updated_at"),
+		ErrorStatusField: quoted("error_status"),
 	}
 }
 

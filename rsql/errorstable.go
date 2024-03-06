@@ -8,7 +8,6 @@ import (
 
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/internal/metrics"
-	"github.com/luno/reflex/rpatterns"
 )
 
 // ErrorInserter abstracts the insertion of an error into a sql table.
@@ -27,13 +26,14 @@ func nullEventInserter(_ context.Context, _ *sql.Tx, _ string, _ reflex.EventTyp
 func NewErrorsTable(opts ...ErrorsOption) *ErrorsTable {
 	table := &ErrorsTable{
 		schema: errTableSchema{
-			name:               quoted(defaultErrorTable),
-			idField:            quoted(defaultErrorIDField),
-			eventConsumerField: quoted(defaultErrorEventConsumerField),
-			eventIDField:       quoted(defaultErrorEventIDField),
-			errorMsgField:      quoted(defaultErrorMsgField),
-			errorTimeField:     quoted(defaultErrorTimeField),
-			errorStatusField:   quoted(defaultErrorStatusField),
+			name:                quoted(defaultErrorTable),
+			idField:             quoted(defaultErrorIDField),
+			eventConsumerField:  quoted(defaultErrorEventConsumerField),
+			eventIDField:        quoted(defaultErrorEventIDField),
+			errorMsgField:       quoted(defaultErrorMsgField),
+			errorCreatedAtField: quoted(defaultErrorCreatedAtField),
+			errorUpdatedAtField: quoted(defaultErrorUpdatedAtField),
+			errorStatusField:    quoted(defaultErrorStatusField),
 		},
 		config: opts,
 	}
@@ -80,11 +80,19 @@ func WithErrorIDField(field string) ErrorsOption {
 	}
 }
 
-// WithErrorTimeField provides an option to set the error DB timestamp field.
-// It defaults to 'timestamp'.
-func WithErrorTimeField(field string) ErrorsOption {
+// WithErrorCreatedAtField provides an option to set the error DB created at timestamp field.
+// It defaults to 'created_at'.
+func WithErrorCreatedAtField(field string) ErrorsOption {
 	return func(table *ErrorsTable) {
-		table.schema.errorTimeField = quoted(field)
+		table.schema.errorCreatedAtField = quoted(field)
+	}
+}
+
+// WithErrorUpdatedAtField provides an option to set the error DB updated at timestamp field.
+// It defaults to 'updated_at'.
+func WithErrorUpdatedAtField(field string) ErrorsOption {
+	return func(table *ErrorsTable) {
+		table.schema.errorUpdatedAtField = quoted(field)
 	}
 }
 
@@ -165,7 +173,7 @@ type ErrorsTable struct {
 	counter       func(consumer string)
 }
 
-func (t *ErrorsTable) ToDeadLetterFunc(dbc *sql.DB) rpatterns.DeadLetterFunc {
+func (t *ErrorsTable) ToErrorInsertFunc(dbc *sql.DB) reflex.ErrorInsertFunc {
 	msg := "dead lettering error failed"
 	errStatus := reflex.EventErrorRecorded
 	return func(ctx context.Context, consumer string, eventID string, errMsg string) error {
@@ -201,11 +209,12 @@ func (t *ErrorsTable) ToDeadLetterFunc(dbc *sql.DB) rpatterns.DeadLetterFunc {
 
 // errTableSchema defines the mysql schema of a consumer event errors table.
 type errTableSchema struct {
-	name               string
-	idField            string
-	eventConsumerField string
-	eventIDField       string
-	errorMsgField      string
-	errorTimeField     string
-	errorStatusField   string
+	name                string
+	idField             string
+	eventConsumerField  string
+	eventIDField        string
+	errorMsgField       string
+	errorCreatedAtField string
+	errorUpdatedAtField string
+	errorStatusField    string
 }

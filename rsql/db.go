@@ -31,8 +31,9 @@ const (
 	defaultErrorEventConsumerField = "consumer"
 	defaultErrorEventIDField       = "event_id"
 	defaultErrorMsgField           = "error_msg"
-	defaultErrorTimeField          = "timestamp"
-	defaultErrorStatusField        = "status"
+	defaultErrorCreatedAtField     = "created_at"
+	defaultErrorUpdatedAtField     = "updated_at"
+	defaultErrorStatusField        = "error_status"
 )
 
 // eventType is the rsql internal implementation of EventType interface.
@@ -285,8 +286,8 @@ func makeDefaultErrorInserter(schema errTableSchema) ErrorInserter {
 	// NB: See the documentation is the following link on the behaviour of "on duplicate key update" https://dev.mysql.com/doc/refman/5.7/en/insert-on-duplicate.html#:~:text=KEY%20UPDATE%20Statement-,13.2.5.2,-INSERT%20...%20ON%20DUPLICATE
 	// NB: See the documentation is the following link on the behaviour of "on last_insert_id(<expr>)" https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_last-insert-id
 	q := fmt.Sprintf(
-		"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=? on duplicate key update %s=last_insert_id(%s)",
-		schema.name, schema.eventConsumerField, schema.eventIDField, schema.errorMsgField, schema.errorTimeField, schema.errorStatusField, schema.idField, schema.idField)
+		"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=now(6), %s=? on duplicate key update %s=last_insert_id(%s)",
+		schema.name, schema.eventConsumerField, schema.eventIDField, schema.errorMsgField, schema.errorCreatedAtField, schema.errorUpdatedAtField, schema.errorStatusField, schema.idField, schema.idField)
 	return func(ctx context.Context, tx *sql.Tx, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus) (string, error) {
 		r, err := tx.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
 		// If the error has already been written then we can ignore the error

@@ -167,26 +167,33 @@ func (c *consumer) Consume(ctx context.Context, event *Event) error {
 		ctx = tracing.Inject(ctx, event.Trace)
 	}
 
-	ok, err := c.filter(event)
+	// NOTE: The behaviour below
+	// Try to filter out the event
+	//  a) If the filtering returns an error then we wrap it and don't process the event
+	//  b) if the filtering excludes the event then we update the skipped metrics and don't process it
+	//  c) if no filtering error is returned, and it indicates that the event should be processed, do we consume it
+	process, err := c.filter(event)
 	if err != nil {
-		c.errorCounter.Inc()
 		err = asFilterErr(err)
-	} else if ok {
-		err = c.fn(ctx, event)
-		if err != nil && !IsExpected(err) {
-			err = c.consumeError(ctx, event, err)
-		}
-
-		latency := time.Since(t0)
-		c.latencyHist.Observe(latency.Seconds())
-	} else {
+	} else if !process {
 		metrics.ConsumerSkippedEvents.WithLabelValues(c.name).Inc()
+	} else {
+		err = c.fn(ctx, event)
 	}
+
+	// We can in theory recover from either a filtering and a processing error here
+	// In either case we will increment the error count metric if we cannot recover from the error
+	if err != nil && !IsExpected(err) {
+		err = c.tryErrorRecovery(ctx, event, err)
+	}
+
+	latency := time.Since(t0)
+	c.latencyHist.Observe(latency.Seconds())
 
 	return err
 }
 
-func (c *consumer) consumeError(ctx context.Context, event *Event, err error) error {
+func (c *consumer) tryErrorRecovery(ctx context.Context, event *Event, err error) error {
 	err = c.rfn(ctx, event, c, err)
 	if err != nil && !IsExpected(err) {
 		c.errorCounter.Inc()
@@ -194,6 +201,8 @@ func (c *consumer) consumeError(ctx context.Context, event *Event, err error) er
 	return err
 }
 
+// filter returns true if the event should be processed and false if it shouldn't and if
+// the filtering fails it will return a non nil error as well
 func (c *consumer) filter(event *Event) (bool, error) {
 	ok := len(c.filterIncludeTypes) == 0 || IsAnyType(event.Type, c.filterIncludeTypes...)
 	if !ok {

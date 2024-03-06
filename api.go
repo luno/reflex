@@ -177,17 +177,10 @@ type CursorStore interface {
 // just be recording the error or since it takes in the error and returns an error as well it can
 // return nil to "recover" from the error (additional work may obviously be needed to do any actual
 // recovery), return the same error if it could not be handled or even return a different error.
-type RecoveryFunc func(context.Context, *Event, Consumer, error) error
+type RecoveryFunc func(ctx context.Context, ev *Event, consumer Consumer, err error) error
 
-// ConsumerError is record of record reflex event consumer errors.
-type ConsumerError struct {
-	ID        string
-	Consumer  string
-	EventID   string
-	Message   string
-	Timestamp time.Time
-	Status    ErrorStatus
-}
+// ErrorInsertFunc abstracts the insertion of an event into a sql table.
+type ErrorInsertFunc func(ctx context.Context, consumerName string, eventID string, errMsg string) error
 
 // ErrorStatus is the current status of a consumer error.
 type ErrorStatus int
@@ -205,3 +198,38 @@ const (
 	// EventErrorRecorded - New errors should be saved in this state [initial]
 	EventErrorRecorded ErrorStatus = 1
 )
+
+// ConsumerError is a record of a reflex event consumer error.
+type ConsumerError struct {
+	ID           string
+	ConsumerName string
+	EventID      string
+	Message      string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Status       ErrorStatus
+}
+
+// IDInt returns the event id as an int64 or 0 if it is not an integer.
+func (e *ConsumerError) IDInt() int64 {
+	i, _ := strconv.ParseInt(e.ID, 10, 64)
+	return i
+}
+
+// IsIDInt returns true if the event id is an integer.
+func (e *ConsumerError) IsIDInt() bool {
+	_, err := strconv.ParseInt(e.ID, 10, 64)
+	return err == nil
+}
+
+// EventIDInt returns the event id as an int64 or 0 if it is not an integer.
+func (e *ConsumerError) EventIDInt() int64 {
+	i, _ := strconv.ParseInt(e.EventID, 10, 64)
+	return i
+}
+
+// IsEventIDInt returns true if the event id is an integer.
+func (e *ConsumerError) IsEventIDInt() bool {
+	_, err := strconv.ParseInt(e.EventID, 10, 64)
+	return err == nil
+}

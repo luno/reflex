@@ -91,10 +91,10 @@ func TestDefaultErrorsTable(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 			table := rsql.NewErrorsTable()
-			dFn := table.ToDeadLetterFunc(dbc)
+			cFn := table.ToErrorInsertFunc(dbc)
 
 			for i := 0; i < len(test.event); i++ {
-				err := dFn(context.Background(), test.consumer[i], test.event[i], test.errMsg[i])
+				err := cFn(context.Background(), test.consumer[i], test.event[i], test.errMsg[i])
 				// Duplicates are ignored when writing errors
 				jtest.RequireNil(t, err)
 			}
@@ -113,8 +113,9 @@ func TestErrorsTable(t *testing.T) {
 				rsql.WithErrorIDField("id"),
 				rsql.WithErrorEventIDField("event_id"),
 				rsql.WithErrorMsgField("error_msg"),
-				rsql.WithErrorTimeField("timestamp"),
-				rsql.WithErrorStatusField("status"),
+				rsql.WithErrorCreatedAtField("created_at"),
+				rsql.WithErrorUpdatedAtField("updated_at"),
+				rsql.WithErrorStatusField("error_status"),
 				rsql.WithErrorInserter(
 					func(ctx context.Context, tx *sql.Tx, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus) (string, error) {
 						msg := "insert consumer error failed"
@@ -132,8 +133,8 @@ func TestErrorsTable(t *testing.T) {
 						// NB: See the documentation is the following link on the behaviour of "on duplicate key update" https://dev.mysql.com/doc/refman/5.7/en/insert-on-duplicate.html#:~:text=KEY%20UPDATE%20Statement-,13.2.5.2,-INSERT%20...%20ON%20DUPLICATE
 						// NB: See the documentation is the following link on the behaviour of "on last_insert_id(<expr>)" https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_last-insert-id
 						q := fmt.Sprintf(
-							"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=? on duplicate key update id=last_insert_id(id)",
-							errorsTable, "consumer", "event_id", "error_msg", "timestamp", "status")
+							"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=now(6), %s=? on duplicate key update id=last_insert_id(id)",
+							errorsTable, "consumer", "event_id", "error_msg", "created_at", "updated_at", "error_status")
 						r, err := tx.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
 						// If the error has already been written then we can ignore the error
 						if err != nil && !rsql.IsDuplicateErrorInsertion(err) {
@@ -149,10 +150,10 @@ func TestErrorsTable(t *testing.T) {
 				rsql.WithErrorCounter(func(_ string) {}),
 				rsql.WithErrorEventInserter(rsql.NewEventsTable(errorsTable+"_events", rsql.WithEventMetadataField("metadata")).InsertWithMetadata),
 			)
-			dFn := table.ToDeadLetterFunc(dbc)
+			cFn := table.ToErrorInsertFunc(dbc)
 
 			for i := 0; i < len(test.event); i++ {
-				err := dFn(context.Background(), test.consumer[i], test.event[i], test.errMsg[i])
+				err := cFn(context.Background(), test.consumer[i], test.event[i], test.errMsg[i])
 				jtest.RequireNil(t, err)
 			}
 		})
