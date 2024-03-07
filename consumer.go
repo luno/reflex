@@ -171,7 +171,7 @@ func (c *consumer) Consume(ctx context.Context, event *Event) error {
 	// Try to filter out the event
 	//  a) If the filtering returns an error then we wrap it and don't process the event
 	//  b) if the filtering excludes the event then we update the skipped metrics and don't process it
-	//  c) if no filtering error is returned, and it indicates that the event should be processed, do we consume it
+	//  c) Only if no filtering error is returned, and filter indicates that the event should be processed, then we try to process it
 	process, err := c.filter(event)
 	if err != nil {
 		err = asFilterErr(err)
