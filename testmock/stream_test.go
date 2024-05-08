@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/luno/jettison/jtest"
 	"github.com/stretchr/testify/require"
@@ -17,7 +16,7 @@ type reflexType int
 
 func (rt reflexType) ReflexType() int { return int(rt) }
 
-func TestNewStreamClient(t *testing.T) {
+func TestNewTestStreamer(t *testing.T) {
 	events := []reflex.Event{
 		{
 			ID:   "1",
@@ -38,129 +37,83 @@ func TestNewStreamClient(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	stream := testmock.NewStreamClient(ctx, events...)
+	streamer := testmock.NewTestStreamer(t)
+	t.Cleanup(streamer.Stop)
 
-	for _, expectedEvent := range events {
-		actualEvent, err := stream.Recv()
-		jtest.RequireNil(t, err)
-
-		require.Equal(t, expectedEvent, *actualEvent)
-	}
-}
-
-func TestNewStreamFunc(t *testing.T) {
-	events := []reflex.Event{
-		{
-			ID:   "1",
-			Type: reflexType(1),
-		},
-		{
-			ID:   "2",
-			Type: reflexType(5),
-		},
-		{
-			ID:   "3",
-			Type: reflexType(1),
-		},
-		{
-			ID:   "4",
-			Type: reflexType(4),
-		},
+	for _, r := range events {
+		streamer.InsertEvent(r)
 	}
 
-	ctx := context.Background()
-	streamFunc := testmock.NewStreamFunc(events...)
-
+	streamFunc := streamer.StreamFunc()
 	for i, expectedEvent := range events {
 		after := fmt.Sprintf("%d", i)
-		streamer, err := streamFunc(ctx, after)
+		streamClient, err := streamFunc(ctx, after)
 		jtest.RequireNil(t, err)
 
-		actualEvent, err := streamer.Recv()
+		actualEvent, err := streamClient.Recv()
 		jtest.RequireNil(t, err)
 
 		require.Equal(t, expectedEvent, *actualEvent)
 	}
 }
 
-func ExampleNewStreamClient() {
-	eventDate := time.Date(2024, time.May, 8, 0, 0, 0, 0, time.UTC)
-	events := []reflex.Event{
-		{
-			ID:        "1",
-			Type:      reflexType(1),
-			ForeignID: "1223894672394",
-			Timestamp: eventDate,
-		},
-		{
-			ID:        "2",
-			Type:      reflexType(5),
-			ForeignID: "1223894672394",
-			Timestamp: eventDate.Add(time.Hour),
-		},
-	}
+func TestNewTestStreamerOptions(t *testing.T) {
+	t.Run("StreamToHead", func(t *testing.T) {
+		ctx := context.Background()
+		streamer := testmock.NewTestStreamer(t)
+		t.Cleanup(streamer.Stop)
 
-	ctx := context.Background()
-	client := testmock.NewStreamClient(ctx, events...)
+		streamer.InsertEvent(reflex.Event{
+			ID:   "1",
+			Type: reflexType(1),
+		})
+		streamer.InsertEvent(reflex.Event{
+			ID:   "2",
+			Type: reflexType(2),
+		})
 
-	event, err := client.Recv()
-	if err != nil {
-		panic(err)
-	}
+		streamFunc := streamer.StreamFunc()
+		streamClient, err := streamFunc(ctx, "", reflex.WithStreamToHead())
+		jtest.RequireNil(t, err)
 
-	fmt.Println(event)
+		_, err = streamClient.Recv()
+		jtest.RequireNil(t, err)
 
-	event, err = client.Recv()
-	if err != nil {
-		panic(err)
-	}
+		_, err = streamClient.Recv()
+		jtest.RequireNil(t, err)
 
-	fmt.Println(event)
+		_, err = streamClient.Recv()
+		jtest.Require(t, reflex.ErrHeadReached, err)
+	})
 
-	// Output:
-	// &{1 1 1223894672394 2024-05-08 00:00:00 +0000 UTC [] []}
-	// &{2 5 1223894672394 2024-05-08 01:00:00 +0000 UTC [] []}
-}
+	t.Run("StreamFromHead", func(t *testing.T) {
+		ctx := context.Background()
+		streamer := testmock.NewTestStreamer(t)
+		t.Cleanup(streamer.Stop)
+		streamer.InsertEvent(reflex.Event{
+			ID:   "1",
+			Type: reflexType(1),
+		})
+		streamer.InsertEvent(reflex.Event{
+			ID:   "2",
+			Type: reflexType(2),
+		})
 
-func ExampleNewStreamFunc() {
-	eventDate := time.Date(2024, time.May, 8, 0, 0, 0, 0, time.UTC)
-	events := []reflex.Event{
-		{
-			ID:        "1",
-			Type:      reflexType(1),
-			ForeignID: "1223894672394",
-			Timestamp: eventDate,
-		},
-		{
-			ID:        "2",
-			Type:      reflexType(5),
-			ForeignID: "1223894672394",
-			Timestamp: eventDate.Add(time.Hour),
-		},
-	}
-	streamClient := testmock.NewStreamFunc(events...)
+		streamFunc := streamer.StreamFunc()
+		streamClient, err := streamFunc(ctx, "", reflex.WithStreamFromHead())
+		jtest.RequireNil(t, err)
 
-	ctx := context.Background()
-	client, err := streamClient(ctx, "")
-	if err != nil {
-		panic(err)
-	}
+		streamer.InsertEvent(reflex.Event{
+			ID:   "3",
+			Type: reflexType(3),
+		})
 
-	event, err := client.Recv()
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(event)
-
-	event, err = client.Recv()
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(event)
-
-	// Output:
-	// &{1 1 1223894672394 2024-05-08 00:00:00 +0000 UTC [] []}
-	// &{2 5 1223894672394 2024-05-08 01:00:00 +0000 UTC [] []}
+		actual, err := streamClient.Recv()
+		jtest.RequireNil(t, err)
+		expected := reflex.Event{
+			ID:   "3",
+			Type: reflexType(3),
+		}
+		require.Equal(t, expected, *actual)
+	})
 }
