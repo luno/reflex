@@ -50,6 +50,7 @@ func TestNewTestStreamer(t *testing.T) {
 		return nil
 	})
 	var cStore cursor
+
 	spec := reflex.NewSpec(
 		streamFunc,
 		&cStore,

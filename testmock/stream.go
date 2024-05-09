@@ -77,12 +77,15 @@ func (ts *testStreamerImpl) StreamFunc() reflex.StreamFunc {
 			offset = len(*ts.log)
 		}
 
+		var cursor cursorStore
+		cursor.Set(offset)
+
 		return &streamClientImpl{
 			ctx:       ctx,
 			parentCtx: ts.ctx,
 			mu:        ts.mu,
 			log:       ts.log,
-			offset:    offset,
+			cursor:    &cursor,
 			options:   options,
 		}, nil
 	}
@@ -93,7 +96,7 @@ type streamClientImpl struct {
 	parentCtx context.Context
 	mu        *sync.Mutex
 	log       *[]reflex.Event
-	offset    int
+	cursor    *cursorStore
 	options   reflex.StreamOptions
 }
 
@@ -101,10 +104,9 @@ func (s *streamClientImpl) Recv() (*reflex.Event, error) {
 	for s.ctx.Err() == nil && s.parentCtx.Err() == nil {
 		s.mu.Lock()
 		log := *s.log
-		offset := s.offset
-		s.offset += 1
 		s.mu.Unlock()
 
+		offset := s.cursor.Get()
 		if len(log)-1 < offset {
 			if s.options.StreamToHead {
 				return nil, errors.Wrap(reflex.ErrHeadReached, "")
@@ -114,6 +116,7 @@ func (s *streamClientImpl) Recv() (*reflex.Event, error) {
 			continue
 		}
 
+		s.cursor.Set(offset + 1)
 		return &log[offset], nil
 	}
 
@@ -122,4 +125,23 @@ func (s *streamClientImpl) Recv() (*reflex.Event, error) {
 	}
 
 	return nil, s.ctx.Err()
+}
+
+type cursorStore struct {
+	mu     sync.Mutex
+	cursor int
+}
+
+func (cs *cursorStore) Get() int {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	return cs.cursor
+}
+
+func (cs *cursorStore) Set(value int) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	cs.cursor = value
 }
