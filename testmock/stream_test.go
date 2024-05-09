@@ -2,7 +2,7 @@ package testmock_test
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/luno/jettison/jtest"
@@ -17,6 +17,9 @@ type reflexType int
 func (rt reflexType) ReflexType() int { return int(rt) }
 
 func TestNewTestStreamer(t *testing.T) {
+	ctx := context.Background()
+	streamer := testmock.NewTestStreamer(t)
+
 	events := []reflex.Event{
 		{
 			ID:   "1",
@@ -35,24 +38,30 @@ func TestNewTestStreamer(t *testing.T) {
 			Type: reflexType(4),
 		},
 	}
-
-	ctx := context.Background()
-	streamer := testmock.NewTestStreamer(t)
-
 	for _, r := range events {
 		streamer.InsertEvent(r)
 	}
 
 	streamFunc := streamer.StreamFunc()
+
+	var consumedEvents []reflex.Event
+	consumer := reflex.NewConsumer("test", func(ctx context.Context, event *reflex.Event) error {
+		consumedEvents = append(consumedEvents, *event)
+		return nil
+	})
+	var cStore cursor
+	spec := reflex.NewSpec(
+		streamFunc,
+		&cStore,
+		consumer,
+		reflex.WithStreamToHead(),
+	)
+	err := reflex.Run(ctx, spec)
+	jtest.Require(t, reflex.ErrHeadReached, err)
+
 	for i, expectedEvent := range events {
-		after := fmt.Sprintf("%d", i)
-		streamClient, err := streamFunc(ctx, after)
-		jtest.RequireNil(t, err)
-
-		actualEvent, err := streamClient.Recv()
-		jtest.RequireNil(t, err)
-
-		require.Equal(t, expectedEvent, *actualEvent)
+		actualEvent := consumedEvents[i]
+		require.Equal(t, expectedEvent, actualEvent)
 	}
 }
 
@@ -113,3 +122,20 @@ func TestNewTestStreamerOptions(t *testing.T) {
 		require.Equal(t, expected, *actual)
 	})
 }
+
+type cursor int64
+
+func (c cursor) GetCursor(context.Context, string) (string, error) {
+	return strconv.FormatInt(int64(c), 10), nil
+}
+
+func (c *cursor) SetCursor(_ context.Context, _ string, val string) error {
+	v, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return err
+	}
+	*c = cursor(v)
+	return nil
+}
+
+func (c cursor) Flush(context.Context) error { return nil }
