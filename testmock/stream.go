@@ -19,21 +19,28 @@ func NewTestStreamer(t *testing.T) TestStreamer {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	return &testStreamerImpl{
-		ctx: ctx,
-		mu:  &sync.Mutex{},
-		log: &log,
+		ctx:    ctx,
+		cancel: cancel,
+		mu:     &sync.Mutex{},
+		log:    &log,
 	}
 }
 
 type TestStreamer interface {
 	InsertEvent(r reflex.Event)
 	StreamFunc() reflex.StreamFunc
+	Stop()
 }
 
 type testStreamerImpl struct {
-	ctx context.Context
-	mu  *sync.Mutex
-	log *[]reflex.Event
+	ctx    context.Context
+	cancel context.CancelFunc
+	mu     *sync.Mutex
+	log    *[]reflex.Event
+}
+
+func (ts *testStreamerImpl) Stop() {
+	ts.cancel()
 }
 
 func (ts *testStreamerImpl) InsertEvent(r reflex.Event) {
@@ -70,32 +77,36 @@ func (ts *testStreamerImpl) StreamFunc() reflex.StreamFunc {
 			offset = len(*ts.log)
 		}
 
+		var cursor cursorStore
+		cursor.Set(offset)
+
 		return &streamClientImpl{
-			ctx:     ts.ctx,
-			mu:      ts.mu,
-			log:     ts.log,
-			offset:  offset,
-			options: options,
+			ctx:       ctx,
+			parentCtx: ts.ctx,
+			mu:        ts.mu,
+			log:       ts.log,
+			cursor:    &cursor,
+			options:   options,
 		}, nil
 	}
 }
 
 type streamClientImpl struct {
-	ctx     context.Context
-	mu      *sync.Mutex
-	log     *[]reflex.Event
-	offset  int
-	options reflex.StreamOptions
+	ctx       context.Context
+	parentCtx context.Context
+	mu        *sync.Mutex
+	log       *[]reflex.Event
+	cursor    *cursorStore
+	options   reflex.StreamOptions
 }
 
 func (s *streamClientImpl) Recv() (*reflex.Event, error) {
-	for s.ctx.Err() == nil {
+	for s.ctx.Err() == nil && s.parentCtx.Err() == nil {
 		s.mu.Lock()
 		log := *s.log
-		offset := s.offset
-		s.offset += 1
 		s.mu.Unlock()
 
+		offset := s.cursor.Get()
 		if len(log)-1 < offset {
 			if s.options.StreamToHead {
 				return nil, errors.Wrap(reflex.ErrHeadReached, "")
@@ -105,8 +116,32 @@ func (s *streamClientImpl) Recv() (*reflex.Event, error) {
 			continue
 		}
 
+		s.cursor.Set(offset + 1)
 		return &log[offset], nil
 	}
 
+	if s.parentCtx.Err() != nil {
+		return nil, s.parentCtx.Err()
+	}
+
 	return nil, s.ctx.Err()
+}
+
+type cursorStore struct {
+	mu     sync.Mutex
+	cursor int
+}
+
+func (cs *cursorStore) Get() int {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	return cs.cursor
+}
+
+func (cs *cursorStore) Set(value int) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	cs.cursor = value
 }
