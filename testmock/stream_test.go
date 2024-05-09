@@ -38,7 +38,6 @@ func TestNewTestStreamer(t *testing.T) {
 
 	ctx := context.Background()
 	streamer := testmock.NewTestStreamer(t)
-	t.Cleanup(streamer.Stop)
 
 	for _, r := range events {
 		streamer.InsertEvent(r)
@@ -61,8 +60,6 @@ func TestNewTestStreamerOptions(t *testing.T) {
 	t.Run("StreamToHead", func(t *testing.T) {
 		ctx := context.Background()
 		streamer := testmock.NewTestStreamer(t)
-		t.Cleanup(streamer.Stop)
-
 		streamer.InsertEvent(reflex.Event{
 			ID:   "1",
 			Type: reflexType(1),
@@ -89,7 +86,6 @@ func TestNewTestStreamerOptions(t *testing.T) {
 	t.Run("StreamFromHead", func(t *testing.T) {
 		ctx := context.Background()
 		streamer := testmock.NewTestStreamer(t)
-		t.Cleanup(streamer.Stop)
 		streamer.InsertEvent(reflex.Event{
 			ID:   "1",
 			Type: reflexType(1),

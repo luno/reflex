@@ -17,29 +17,23 @@ func NewTestStreamer(t *testing.T) TestStreamer {
 	var log []reflex.Event
 
 	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	return &testStreamerImpl{
-		ctx:    ctx,
-		cancel: cancel,
-		mu:     &sync.Mutex{},
-		log:    &log,
+		ctx: ctx,
+		mu:  &sync.Mutex{},
+		log: &log,
 	}
 }
 
 type TestStreamer interface {
 	InsertEvent(r reflex.Event)
 	StreamFunc() reflex.StreamFunc
-	Stop()
 }
 
 type testStreamerImpl struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	mu     *sync.Mutex
-	log    *[]reflex.Event
-}
-
-func (ts *testStreamerImpl) Stop() {
-	ts.ctx.Done()
+	ctx context.Context
+	mu  *sync.Mutex
+	log *[]reflex.Event
 }
 
 func (ts *testStreamerImpl) InsertEvent(r reflex.Event) {
@@ -77,7 +71,6 @@ func (ts *testStreamerImpl) StreamFunc() reflex.StreamFunc {
 		}
 
 		return &streamClientImpl{
-			// Use parent context rather for Stop method
 			ctx:     ts.ctx,
 			mu:      ts.mu,
 			log:     ts.log,
