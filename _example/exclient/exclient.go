@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/luno/reflex"
-	"github.com/luno/reflex/example/exclient/db"
-	"github.com/luno/reflex/example/exserver"
-	exserver_client "github.com/luno/reflex/example/exserver/client"
+	"github.com/luno/reflex/_example/exclient/db"
+	"github.com/luno/reflex/_example/exserver"
+	exserver_client "github.com/luno/reflex/_example/exserver/client"
 )
 
 func main() {

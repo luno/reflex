@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/luno/reflex"
-	"github.com/luno/reflex/example/exserver/db"
-	pb "github.com/luno/reflex/example/exserver/exserverpb"
+	"github.com/luno/reflex/_example/exserver/db"
+	pb "github.com/luno/reflex/_example/exserver/exserverpb"
 	"github.com/luno/reflex/reflexpb"
 )
 

@@ -4,9 +4,9 @@ import (
 	"flag"
 	"log"
 
-	"github.com/luno/reflex/example/exserver/db"
-	"github.com/luno/reflex/example/exserver/ops"
-	"github.com/luno/reflex/example/exserver/server"
+	"github.com/luno/reflex/_example/exserver/db"
+	"github.com/luno/reflex/_example/exserver/ops"
+	"github.com/luno/reflex/_example/exserver/server"
 )
 
 var listenAddr = flag.String("listen_addr", ":1234",

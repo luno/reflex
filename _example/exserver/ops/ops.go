@@ -6,8 +6,8 @@ import (
 	"log"
 
 	"github.com/luno/reflex"
-	"github.com/luno/reflex/example/exserver"
-	"github.com/luno/reflex/example/exserver/db"
+	"github.com/luno/reflex/_example/exserver"
+	"github.com/luno/reflex/_example/exserver/db"
 )
 
 // ConsumeLocalStreamForever connects to the local server and prints out each event

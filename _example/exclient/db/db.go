@@ -10,7 +10,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/require"
 
-	"github.com/luno/reflex/example/internal/db"
+	"github.com/luno/reflex/_example/internal/db"
 	"github.com/luno/reflex/rsql"
 )
 
