@@ -39,15 +39,16 @@ type ConcurrentConsumer struct {
 	consumeError    error
 }
 
-// NewConcurrentConsumer creates a new consumer with an inflight buffer of 100 events
+// NewConcurrentConsumer creates a new consumer with an inflight buffer for events
 func NewConcurrentConsumer(
 	cStore reflex.CursorStore,
 	consumer reflex.Consumer,
+	maxInFlight int,
 ) *ConcurrentConsumer {
 	return &ConcurrentConsumer{
 		cStore:      cStore,
 		consumer:    consumer,
-		maxInFlight: 100,
+		maxInFlight: maxInFlight,
 	}
 }
 

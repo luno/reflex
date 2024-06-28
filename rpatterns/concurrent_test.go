@@ -31,7 +31,7 @@ func (w wrapConsume) Consume(ctx context.Context, e *reflex.Event) error {
 func TestConcurrentConsumer(t *testing.T) {
 	cs := MemCursorStore()
 
-	cons := NewConcurrentConsumer(cs, wrapConsume{name: "test"})
+	cons := NewConcurrentConsumer(cs, wrapConsume{name: "test"}, 100)
 
 	err := cons.Reset()
 	jtest.RequireNil(t, err)
@@ -66,7 +66,7 @@ func TestErrorPropagatedToConsumeEventually(t *testing.T) {
 		},
 	}
 
-	cons := NewConcurrentConsumer(cs, errorOnTwo)
+	cons := NewConcurrentConsumer(cs, errorOnTwo, 100)
 
 	err := cons.Reset()
 	jtest.RequireNil(t, err)
@@ -106,7 +106,7 @@ func TestResetClearsError(t *testing.T) {
 		},
 	}
 
-	cons := NewConcurrentConsumer(cs, consumeError)
+	cons := NewConcurrentConsumer(cs, consumeError, 100)
 
 	err := cons.Reset()
 	jtest.RequireNil(t, err)
@@ -135,7 +135,7 @@ func TestResetClearsError(t *testing.T) {
 func TestGapIsIgnored(t *testing.T) {
 	cs := MemCursorStore()
 
-	cons := NewConcurrentConsumer(cs, wrapConsume{name: "test"})
+	cons := NewConcurrentConsumer(cs, wrapConsume{name: "test"}, 100)
 
 	err := cons.Reset()
 	jtest.RequireNil(t, err)
