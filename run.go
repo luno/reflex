@@ -43,6 +43,9 @@ func Run(in context.Context, s Spec) error {
 		opts []StreamOption
 	)
 	for _, opt := range s.opts {
+		if opt == nil {
+			panic("nil opt passed in")
+		}
 		var temp StreamOptions
 		opt(&temp)
 		if temp.Lag > 0 {
