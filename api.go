@@ -99,6 +99,12 @@ func (req Spec) Stop() error {
 func NewSpec(stream StreamFunc, cStore CursorStore, consumer Consumer,
 	opts ...StreamOption,
 ) Spec {
+	for _, o := range opts {
+		if o == nil {
+			panic("nil opt passed in")
+		}
+	}
+
 	return Spec{
 		stream:   stream,
 		cStore:   cStore,
