@@ -24,6 +24,7 @@ func TestStreamAll(t *testing.T) {
 	tests := []struct {
 		Name     string
 		Path     string
+		Prefix   string
 		After    string
 		Expect   int
 		IDOffset int
@@ -58,6 +59,26 @@ func TestStreamAll(t *testing.T) {
 			Expect:   3,
 			IDOffset: 4,
 		},
+		{
+			Name:     "prefix with slash",
+			Path:     "2020",
+			Prefix:   "01/",
+			Expect:   3,
+			IDOffset: 3,
+		},
+		{
+			Name:   "prefix without slash",
+			Path:   "2021",
+			Prefix: "Test-2021-01-01",
+			Expect: 3,
+		},
+		{
+			Name:     "prefix without slash and offset",
+			Path:     "2021",
+			Prefix:   "Test-2021-01-02",
+			Expect:   2,
+			IDOffset: 3,
+		},
 	}
 
 	dir, err := os.Getwd()
@@ -66,6 +87,9 @@ func TestStreamAll(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			url := "file:///" + path.Join(dir, "testdata", test.Path)
+			if test.Prefix != "" {
+				url += "?prefix=" + test.Prefix
+			}
 
 			bucket, err := rblob.OpenBucket(context.Background(), "", url)
 			require.NoError(t, err)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -58,16 +57,6 @@ type Option func(*Bucket)
 func OpenBucket(ctx context.Context, label, urlstr string,
 	opts ...Option,
 ) (*Bucket, error) {
-	u, err := url.Parse(urlstr)
-	if err != nil {
-		return nil, errors.Wrap(err, "parse url string")
-	}
-
-	prefix := u.Query().Get("prefix")
-	if prefix != "" && !strings.HasSuffix(prefix, "/") {
-		return nil, errors.New("prefix should end with '/'")
-	}
-
 	bucket, err := blob.OpenBucket(ctx, urlstr)
 	if err != nil {
 		return nil, err
