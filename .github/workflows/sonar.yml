@@ -24,11 +24,13 @@ jobs:
 
     steps:
 
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-
 
       - name: Generate Sonar Report
         run: go test -coverpkg=./... -coverprofile=coverage.out -json ./... > sonar-report.json
