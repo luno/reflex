@@ -11,6 +11,9 @@ import (
 	"github.com/luno/reflex"
 )
 
+// AwaitConsumer waits for a maximum of 15 seconds for a consumer, with the name provided as "consumerName", to consume
+// a specific event which is done by specifying the event ID. The event ID needs to be less than or equal to the
+// consumer's cursor store value in order for AwaitConsumer to return and unblock.
 func AwaitConsumer(t *testing.T, cs reflex.CursorStore, consumerName string, eventID int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	t.Cleanup(cancel)
