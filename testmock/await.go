@@ -25,7 +25,7 @@ func AwaitConsumer(t *testing.T, cs reflex.CursorStore, consumerName string, eve
 			jtest.RequireNil(t, err)
 		}
 
-		if eID == eventID {
+		if eID >= eventID {
 			break
 		}
 
