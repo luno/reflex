@@ -27,8 +27,16 @@ func NewTestStreamer(t *testing.T) TestStreamer {
 }
 
 type TestStreamer interface {
+	// InsertEvent allows the insertion of the event into the event stream that can be consumed by any callers of
+	// StreamFunc and may be called before or after a consumer starts consuming the stream.
+	//
+	// NOTE: Ypu must provide an ID as it will not be automatically generated.
 	InsertEvent(r reflex.Event)
+
+	// StreamFunc matches the standard signature that consumers expect for consuming a reflex stream.
 	StreamFunc() reflex.StreamFunc
+
+	// Stop should be called once the stream is no longer needed to ensure there is no goroutime leaks.
 	Stop()
 }
 
