@@ -1,7 +1,12 @@
 # Reflex
-[![Build](https://github.com/luno/reflex/workflows/Go/badge.svg?branch=master)](https://github.com/luno/reflex/actions?query=workflow%3AGo)
-[![Go Report Card](https://goreportcard.com/badge/github.com/luno/reflex?style=flat-square)](https://goreportcard.com/report/github.com/luno/reflex)
-[![Go Doc](https://img.shields.io/badge/godoc-reference-blue.svg?style=flat-square)](http://godoc.org/github.com/luno/reflex)
+[![Go](https://github.com/luno/reflex/actions/workflows/test.yml/badge.svg)](https://github.com/luno/reflex/actions/workflows/test.yml)[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=luno_reflex&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=luno_reflex)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=luno_reflex&metric=coverage)](https://sonarcloud.io/summary/new_code?id=luno_reflex)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=luno_reflex&metric=bugs)](https://sonarcloud.io/summary/new_code?id=luno_reflex)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=luno_reflex&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=luno_reflex)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=luno_reflex&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=luno_reflex)
+[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=luno_reflex&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=luno_reflex)
+[![Go Report Card](https://goreportcard.com/badge/github.com/luno/reflex)](https://goreportcard.com/report/github.com/luno/reflex)
+[![GoDoc](https://godoc.org/github.com/luno/reflex?status.png)](https://godoc.org/github.com/luno/reflex)
 
 > reflex /ˈriːflɛks/
 >
@@ -98,5 +103,3 @@ The following packages provide `reflex.StreamFunc` event stream source implement
 The following packages provide `reflex.CursorStore` cursor store implementations:
  - [github.com/luno/reflex/rsql](github.com/luno/reflex/rsql]): mysql table cursors with `rsql.CursorsTable`.
  - [experimental] [github.com/corverroos/rlift](https://github.com/corverroos/rlift): [liftbridge](https://github.com/liftbridge-io/liftbridge) table cursors with `rlift.CursorStore`.
-
- 
