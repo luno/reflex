@@ -1,0 +1,45 @@
+name: Sonar Report
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: 'mysql:8'
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_DATABASE: example
+        ports:
+          - 3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Generate Sonar Report
+        run: go test -coverpkg=./... -coverprofile=coverage.out -json ./... > sonar-report.json
+        env:
+          DB_TEST_URI: "root:@tcp(localhost:${{ job.services.mysql.ports[3306] }})/"
+          DB_EXAMPLE_CLIENT_URI: "root@tcp(localhost:${{ job.services.mysql.ports[3306] }})/example"
+          DB_EXAMPLE_SERVER_URI: "root@tcp(localhost:${{ job.services.mysql.ports[3306] }})/example"
+
+      - name: Upload coverage reports to Sonar
+        uses: sonarsource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
