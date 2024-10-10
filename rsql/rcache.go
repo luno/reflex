@@ -22,6 +22,18 @@ type rcache struct {
 	limit  int
 }
 
+// enabled is the source of truth whether the rcache is enabled or not.
+var enabled bool
+
+func init() {
+	enabled = true
+}
+
+// DisableCache results in all loading going straight through to the underlying loader.
+func DisableCache() {
+	enabled = false
+}
+
 // newRCache returns a new read-through cache.
 func newRCache(loader loader, name string) *rcache {
 	return &rcache{
@@ -62,7 +74,8 @@ func (c *rcache) tailUnsafe() int64 {
 func (c *rcache) Load(ctx context.Context, dbc *sql.DB,
 	prev int64, lag time.Duration,
 ) ([]*reflex.Event, error) {
-	if res, ok := c.maybeHit(prev+1, lag); ok {
+	res, ok := c.maybeHit(prev+1, lag)
+	if enabled && ok {
 		rcacheHitsCounter.WithLabelValues(c.name).Inc()
 		return res, nil
 	}
@@ -112,7 +125,8 @@ func (c *rcache) readThrough(ctx context.Context, dbc *sql.DB,
 	defer c.mu.Unlock()
 
 	// Recheck cache after waiting for lock
-	if res, ok := c.maybeHitUnsafe(prev+1, lag); ok {
+	res, ok := c.maybeHitUnsafe(prev+1, lag)
+	if enabled && ok {
 		return res, nil
 	}
 
