@@ -64,7 +64,9 @@ func TestGap(t *testing.T) {
 
 func TestRCache(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
+		disabled bool
+
 		add1    int
 		q1      int64
 		len1    int
@@ -98,6 +100,20 @@ func TestRCache(t *testing.T) {
 			len2:    2,
 			total2:  1,
 			q2Count: 1,
+			cLen2:   2,
+		},
+		{
+			name:     "disabled-miss-hit",
+			disabled: true,
+			add1:     2,
+			len1:     2,
+			total1:   1,
+			q1Count:  1,
+			cLen1:    2,
+
+			len2:    2,
+			total2:  2,
+			q2Count: 2,
 			cLen2:   2,
 		},
 		{
@@ -161,6 +177,12 @@ func TestRCache(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			if test.disabled {
+				DisableCache()
+				t.Cleanup(func() {
+					enabled = true
+				})
+			}
 			q := newQ()
 			c := newRCache(q.Load, "test")
 			c.limit = rCacheLimit
