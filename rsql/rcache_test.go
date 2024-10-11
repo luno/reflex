@@ -180,7 +180,7 @@ func TestRCache(t *testing.T) {
 			if test.disabled {
 				DisableCache()
 				t.Cleanup(func() {
-					enabled = true
+					cacheDisabled = false
 				})
 			}
 			q := newQ()
