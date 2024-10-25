@@ -36,7 +36,8 @@ func FillGaps(dbc *sql.DB, gapTable gapTable) {
 // gapTable is a common interface between EventsTable and EventsTableInt
 // defining the subset of methods required for gap filling.
 type gapTable interface {
-	ListenGaps(f func(Gap))
+	ListenGaps(listenFunc GapListenFunc)
+	StopGapListener(ctx context.Context)
 	getSchema() eTableSchema
 }
 
