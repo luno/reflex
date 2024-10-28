@@ -166,3 +166,13 @@ func TestGapFillerStopped(t *testing.T) {
 	_, err = cli.Recv()
 	jtest.Assert(t, context.DeadlineExceeded, err)
 }
+
+func TestStopGapFillerCanBeCancelled(t *testing.T) {
+	table := NewEventsTable("test")
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	t.Cleanup(cancel)
+
+	// This will deadlock without some other await
+	table.StopGapListener(ctx)
+}

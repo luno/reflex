@@ -33,6 +33,12 @@ func FillGaps(dbc *sql.DB, gapTable gapTable) {
 	gapTable.ListenGaps(makeFill(dbc, gapTable.getSchema()))
 }
 
+// StopFillingGaps stops any goroutine started from FillGaps
+// If FillGaps has not been called, then this will block until ctx is cancelled or deadline is reached
+func StopFillingGaps(ctx context.Context, gapTable gapTable) {
+	gapTable.StopGapListener(ctx)
+}
+
 // gapTable is a common interface between EventsTable and EventsTableInt
 // defining the subset of methods required for gap filling.
 type gapTable interface {
