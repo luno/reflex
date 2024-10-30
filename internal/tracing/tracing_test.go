@@ -2,10 +2,10 @@ package tracing_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/luno/jettison/jtest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
@@ -51,8 +51,10 @@ func TestInject(t *testing.T) {
 	jtest.RequireNil(t, err)
 
 	ctx = tracing.Inject(ctx, data)
-	expected := "context.Background.WithValue(type trace.traceContextKeyType, val <not Stringer>).WithValue(type log.contextKey, val <not Stringer>)"
-	require.Equal(t, expected, fmt.Sprint(ctx))
+
+	sc, ok := tracing.Extract(ctx)
+	require.True(t, ok)
+	assert.Equal(t, spanCtx.WithRemote(true), sc)
 }
 
 func setup() {
