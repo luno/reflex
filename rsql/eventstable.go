@@ -45,6 +45,8 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	}
 
 	table.gapCh = make(chan Gap)
+	table.gapListeners = make(chan GapListenFunc)
+	table.gapListenDone = make(chan struct{})
 	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.disableCache, table.schema, table.includeNoopEvents)
 
 	return table
@@ -191,8 +193,9 @@ type EventsTable struct {
 	// Stateful fields not cloned
 	currentLoader filterLoader
 	gapCh         chan Gap
-	gapFns        []func(Gap)
-	gapMu         sync.Mutex
+	gapListeners  chan GapListenFunc
+	gapListenDone chan struct{}
+	gapListening  sync.Once
 }
 
 // Insert inserts an event into the EventsTable and returns a function that
@@ -269,24 +272,38 @@ func (t *EventsTable) ToStream(dbc *sql.DB, opts1 ...reflex.StreamOption) reflex
 }
 
 // ListenGaps adds f to a slice of functions that are called when a gap is detected.
-// One first call, it starts a goroutine that serves these functions.
-func (t *EventsTable) ListenGaps(f func(Gap)) {
-	t.gapMu.Lock()
-	defer t.gapMu.Unlock()
-	if len(t.gapFns) == 0 {
-		// Start serving gaps.
-		eventsGapListenGauge.WithLabelValues(t.schema.name).Set(1)
-		go func() {
-			for gap := range t.gapCh {
-				t.gapMu.Lock()
-				for _, f := range t.gapFns {
-					f(gap)
-				}
-				t.gapMu.Unlock()
-			}
-		}()
+// On first call, it starts a goroutine that serves these functions.
+func (t *EventsTable) ListenGaps(f GapListenFunc) {
+	t.gapListening.Do(func() { go t.serveGaps() })
+	t.gapListeners <- f
+}
+
+func (t *EventsTable) StopGapListener(ctx context.Context) {
+	close(t.gapListeners)
+	select {
+	case <-ctx.Done():
+	case <-t.gapListenDone:
 	}
-	t.gapFns = append(t.gapFns, f)
+}
+
+type GapListenFunc func(Gap)
+
+func (t *EventsTable) serveGaps() {
+	defer close(t.gapListenDone)
+	var fns []GapListenFunc
+	for {
+		select {
+		case gapFn, more := <-t.gapListeners:
+			if !more {
+				return
+			}
+			fns = append(fns, gapFn)
+		case gap := <-t.gapCh:
+			for _, fn := range fns {
+				fn(gap)
+			}
+		}
+	}
 }
 
 // getSchema returns the table schema and implements the gapTable interface for FillGaps.
