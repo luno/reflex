@@ -82,3 +82,17 @@ func TestCursor(t *testing.T) {
 	sort.Strings(order)
 	require.Equal(t, clone, order)
 }
+
+func Test_makeStartAfter(t *testing.T) {
+	t.Run("rejected", func(t *testing.T) {
+		fn := makeStartAfter("after")
+		err := fn(func(v any) bool { return false })
+		require.ErrorContains(t, err, "gocloud.dev rejected our ListObjectsV2Input")
+	})
+
+	t.Run("ok", func(t *testing.T) {
+		fn := makeStartAfter("after")
+		err := fn(func(v any) bool { return true })
+		jtest.RequireNil(t, err)
+	})
+}

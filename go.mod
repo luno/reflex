@@ -3,7 +3,7 @@ module github.com/luno/reflex
 go 1.21
 
 require (
-	github.com/aws/aws-sdk-go v1.44.284
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.35.0
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/luno/jettison v0.0.0-20230912135954-09d6084f5df9
 	github.com/prometheus/client_golang v1.15.0
@@ -18,6 +18,7 @@ require (
 )
 
 require (
+	github.com/aws/aws-sdk-go v1.44.284 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.18.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.18.27 // indirect
@@ -32,7 +33,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.1.29 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.28 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.14.3 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.35.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.12.12 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.12 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.19.2 // indirect

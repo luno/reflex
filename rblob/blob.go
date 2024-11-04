@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/log"
@@ -352,12 +352,14 @@ func getNextKey(ctx context.Context, label string, bucket *blob.Bucket, prev str
 func makeStartAfter(key string) func(func(interface{}) bool) error {
 	return func(asFunc func(interface{}) bool) error {
 		s3input := new(s3.ListObjectsV2Input)
-		if asFunc(&s3input) {
-			if s3input.Prefix != nil {
-				key = path.Join(*s3input.Prefix, key)
-			}
-			s3input.StartAfter = &key
+		if !asFunc(&s3input) {
+			// We always expect asFunc to return true.
+			return errors.New("gocloud.dev rejected our ListObjectsV2Input - check gocloud.dev/blob/s3blob")
 		}
+		if s3input.Prefix != nil {
+			key = path.Join(*s3input.Prefix, key)
+		}
+		s3input.StartAfter = &key
 		return nil
 	}
 }
