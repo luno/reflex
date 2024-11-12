@@ -1,0 +1,8 @@
+{
+  "Q": "insert into events (foreign_id, type, timestamp, trace) values (?, ?, now(6), ?)",
+  "Args": [
+    "fid1",
+    1,
+    "CiAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwORIQMDAwMDAwMDAwMDAwMDAwMg=="
+  ]
+}

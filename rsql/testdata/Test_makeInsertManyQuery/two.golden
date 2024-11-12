@@ -1,0 +1,9 @@
+{
+  "Q": "insert into events (foreign_id, type, timestamp) values (?, ?, now(6)), (?, ?, now(6))",
+  "Args": [
+    "fid1",
+    1,
+    "fid2",
+    2
+  ]
+}

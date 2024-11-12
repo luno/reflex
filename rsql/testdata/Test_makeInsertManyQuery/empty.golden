@@ -1,0 +1,4 @@
+{
+  "Q": "insert into events (foreign_id, type, timestamp) values",
+  "Args": null
+}

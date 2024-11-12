@@ -542,3 +542,25 @@ func TestCloneInserter(t *testing.T) {
 	require.Equal(t, 2, i1)
 	require.Equal(t, 1, i2)
 }
+
+func TestInsertMany(t *testing.T) {
+	ctx := context.Background()
+	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
+
+	table1 := rsql.NewEventsTable(eventsTable)
+
+	tx, _ := dbc.Begin()
+	_, err := table1.InsertMany(ctx, tx, []rsql.EventToInsert{
+		{"fid1", testEventType(1), nil},
+		{"fid2", testEventType(2), nil},
+		{"fid3", testEventType(3), nil},
+	})
+	jtest.RequireNil(t, err)
+	err = tx.Commit()
+	jtest.RequireNil(t, err)
+	el, err := rsql.GetNextEventsForTesting(context.Background(), t, dbc, table1, 0, 0)
+	jtest.RequireNil(t, err)
+	assert.Equal(t, "fid1", el[0].ForeignID)
+	assert.Equal(t, "fid2", el[1].ForeignID)
+	assert.Equal(t, "fid3", el[2].ForeignID)
+}
