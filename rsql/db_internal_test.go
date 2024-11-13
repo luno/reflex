@@ -46,7 +46,7 @@ func Test_makeInsertManyQuery(t *testing.T) {
 
 	t.Run("one", func(t *testing.T) {
 		q, args, err := makeInsertManyQuery(ctx, defaultSchema, []EventToInsert{
-			{"fid1", testEventType(1), nil},
+			{"fid", testEventType(1), nil},
 		})
 		jtest.RequireNil(t, err)
 		assert(t, q, args)
@@ -64,7 +64,10 @@ func Test_makeInsertManyQuery(t *testing.T) {
 	t.Run("more", func(t *testing.T) {
 		var events []EventToInsert
 		for i := range 5 {
-			events = append(events, EventToInsert{"fid", testEventType(i), nil})
+			events = append(events, EventToInsert{
+				ForeignID: fmt.Sprintf("fid%d", i+1),
+				Type:      testEventType(i),
+			})
 		}
 		q, args, err := makeInsertManyQuery(ctx, defaultSchema, events)
 		jtest.RequireNil(t, err)
@@ -73,16 +76,16 @@ func Test_makeInsertManyQuery(t *testing.T) {
 
 	t.Run("metadata_error", func(t *testing.T) {
 		_, _, err := makeInsertManyQuery(ctx, defaultSchema, []EventToInsert{
-			{"fid1", testEventType(1), []byte("metadata")},
+			{"fid", testEventType(1), []byte("metadata")},
 		})
-		require.ErrorContains(t, err, "metadata not enable")
+		require.ErrorContains(t, err, "metadata not enabled")
 	})
 
 	t.Run("with_metadata", func(t *testing.T) {
 		schemaWithMetadata := defaultSchema
 		schemaWithMetadata.metadataField = "metadata"
 		q, args, err := makeInsertManyQuery(ctx, schemaWithMetadata, []EventToInsert{
-			{"fid1", testEventType(1), []byte("metadata")},
+			{"fid", testEventType(1), []byte("metadata")},
 		})
 		jtest.RequireNil(t, err)
 		assert(t, q, args)
@@ -102,7 +105,7 @@ func Test_makeInsertManyQuery(t *testing.T) {
 		jtest.RequireNil(t, err)
 		ctx := tracing.Inject(ctx, data)
 		q, args, err := makeInsertManyQuery(ctx, schemaWithTrace, []EventToInsert{
-			{"fid1", testEventType(1), nil},
+			{"fid", testEventType(1), nil},
 		})
 		jtest.RequireNil(t, err)
 		assert(t, q, args)

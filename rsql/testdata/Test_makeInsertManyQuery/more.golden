@@ -1,12 +1,12 @@
 insert into events (foreign_id, type, timestamp) values (?, ?, now(6)), (?, ?, now(6)), (?, ?, now(6)), (?, ?, now(6)), (?, ?, now(6))
 
-fid
+fid1
 0
-fid
+fid2
 1
-fid
+fid3
 2
-fid
+fid4
 3
-fid
+fid5
 4
