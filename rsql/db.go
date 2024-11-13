@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -46,33 +45,19 @@ func (t eventType) ReflexType() int {
 
 // makeDefaultInserter returns the default sql inserter configured via WithEventsXField options.
 func makeDefaultInserter(schema eTableSchema) inserter {
-	return func(ctx context.Context, tx *sql.Tx,
-		foreignID string, typ reflex.EventType, metadata []byte,
+	ins := makeDefaultManyInserter(schema)
+	return func(
+		ctx context.Context,
+		tx *sql.Tx,
+		foreignID string,
+		typ reflex.EventType,
+		metadata []byte,
 	) error {
-		q := "insert into " + schema.name +
-			" set " + schema.foreignIDField + "=?, " + schema.timeField + "=now(6), " + schema.typeField + "=?"
-		args := []interface{}{foreignID, typ.ReflexType()}
-
-		if schema.metadataField != "" {
-			q += ", " + schema.metadataField + "=?"
-			args = append(args, metadata)
-		} else if metadata != nil {
-			return errors.New("metadata not enabled")
-		}
-
-		spanCtx, hasTrace := tracing.Extract(ctx)
-		if schema.traceField != "" && hasTrace {
-			traceData, err := tracing.Marshal(spanCtx)
-			if err != nil {
-				return err
-			}
-
-			q += ", " + schema.traceField + "=?"
-			args = append(args, traceData)
-		}
-
-		_, err := tx.ExecContext(ctx, q, args...)
-		return errors.Wrap(err, "insert error")
+		return ins(ctx, tx, EventToInsert{
+			ForeignID: foreignID,
+			Type:      typ,
+			Metadata:  metadata,
+		})
 	}
 }
 
@@ -106,33 +91,33 @@ func makeInsertManyQuery(
 		traceData = d
 	}
 
-	cols := []string{schema.foreignIDField, schema.typeField, schema.timeField}
+	cols := schema.foreignIDField + ", " + schema.typeField + ", " + schema.timeField
 	if schema.metadataField != "" {
-		cols = append(cols, schema.metadataField)
+		cols += ", " + schema.metadataField
 	}
 	if traceData != nil {
-		cols = append(cols, schema.traceField)
+		cols += ", " + schema.traceField
 	}
 
-	q := "insert into " + schema.name + " (" + strings.Join(cols, ", ") + ") values"
+	q := "insert into " + schema.name + " (" + cols + ") values"
 
 	for i, e := range events {
-		vals := []string{"?", "?", "now(6)"}
+		vals := "?, ?, now(6)"
 		args = append(args, e.ForeignID, e.Type.ReflexType())
 		if schema.metadataField != "" {
-			vals = append(vals, "?")
+			vals += ", ?"
 			args = append(args, e.Metadata)
 		} else if e.Metadata != nil {
 			return "", nil, errors.New("metadata not enabled")
 		}
 		if traceData != nil {
-			vals = append(vals, "?")
+			vals += ", ?"
 			args = append(args, traceData)
 		}
 		if i > 0 {
 			q += ","
 		}
-		q += " (" + strings.Join(vals, ", ") + ")"
+		q += " (" + vals + ")"
 	}
 
 	return q, args, nil

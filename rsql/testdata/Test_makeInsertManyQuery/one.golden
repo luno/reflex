@@ -1,7 +1,4 @@
-{
-  "Q": "insert into events (foreign_id, type, timestamp) values (?, ?, now(6))",
-  "Args": [
-    "fid1",
-    1
-  ]
-}
+insert into events (foreign_id, type, timestamp) values (?, ?, now(6))
+
+fid1
+1

@@ -1,7 +1,9 @@
 package rsql
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/luno/jettison/jtest"
@@ -17,11 +19,6 @@ import (
 func Test_makeInsertManyQuery(t *testing.T) {
 	ctx := context.Background()
 
-	type res struct {
-		Q    string
-		Args []any
-	}
-
 	defaultSchema := eTableSchema{
 		name:           "events",
 		idField:        "id",
@@ -30,10 +27,21 @@ func Test_makeInsertManyQuery(t *testing.T) {
 		foreignIDField: "foreign_id",
 	}
 
+	assert := func(t *testing.T, q string, args []any) {
+		buf := new(bytes.Buffer)
+		buf.WriteString(q)
+		buf.WriteString("\n")
+		for _, arg := range args {
+			buf.WriteString("\n")
+			buf.WriteString(fmt.Sprint(arg))
+		}
+		goldie.New(t).Assert(t, t.Name(), buf.Bytes())
+	}
+
 	t.Run("empty", func(t *testing.T) {
 		q, args, err := makeInsertManyQuery(ctx, defaultSchema, nil)
 		jtest.RequireNil(t, err)
-		goldie.New(t).AssertJson(t, t.Name(), res{q, args})
+		assert(t, q, args)
 	})
 
 	t.Run("one", func(t *testing.T) {
@@ -41,7 +49,7 @@ func Test_makeInsertManyQuery(t *testing.T) {
 			{"fid1", testEventType(1), nil},
 		})
 		jtest.RequireNil(t, err)
-		goldie.New(t).AssertJson(t, t.Name(), res{q, args})
+		assert(t, q, args)
 	})
 
 	t.Run("two", func(t *testing.T) {
@@ -50,17 +58,17 @@ func Test_makeInsertManyQuery(t *testing.T) {
 			{"fid2", testEventType(2), nil},
 		})
 		jtest.RequireNil(t, err)
-		goldie.New(t).AssertJson(t, t.Name(), res{q, args})
+		assert(t, q, args)
 	})
 
 	t.Run("more", func(t *testing.T) {
 		var events []EventToInsert
-		for i := range 100 {
+		for i := range 5 {
 			events = append(events, EventToInsert{"fid", testEventType(i), nil})
 		}
 		q, args, err := makeInsertManyQuery(ctx, defaultSchema, events)
 		jtest.RequireNil(t, err)
-		goldie.New(t).AssertJson(t, t.Name(), res{q, args})
+		assert(t, q, args)
 	})
 
 	t.Run("metadata_error", func(t *testing.T) {
@@ -77,7 +85,7 @@ func Test_makeInsertManyQuery(t *testing.T) {
 			{"fid1", testEventType(1), []byte("metadata")},
 		})
 		jtest.RequireNil(t, err)
-		goldie.New(t).AssertJson(t, t.Name(), res{q, args})
+		assert(t, q, args)
 	})
 
 	t.Run("with_trace", func(t *testing.T) {
@@ -97,7 +105,7 @@ func Test_makeInsertManyQuery(t *testing.T) {
 			{"fid1", testEventType(1), nil},
 		})
 		jtest.RequireNil(t, err)
-		goldie.New(t).AssertJson(t, t.Name(), res{q, args})
+		assert(t, q, args)
 	})
 }
 
