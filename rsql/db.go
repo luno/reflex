@@ -45,34 +45,82 @@ func (t eventType) ReflexType() int {
 
 // makeDefaultInserter returns the default sql inserter configured via WithEventsXField options.
 func makeDefaultInserter(schema eTableSchema) inserter {
-	return func(ctx context.Context, tx *sql.Tx,
-		foreignID string, typ reflex.EventType, metadata []byte,
+	ins := makeDefaultManyInserter(schema)
+	return func(
+		ctx context.Context,
+		tx *sql.Tx,
+		foreignID string,
+		typ reflex.EventType,
+		metadata []byte,
 	) error {
-		q := "insert into " + schema.name +
-			" set " + schema.foreignIDField + "=?, " + schema.timeField + "=now(6), " + schema.typeField + "=?"
-		args := []interface{}{foreignID, typ.ReflexType()}
+		return ins(ctx, tx, EventToInsert{
+			ForeignID: foreignID,
+			Type:      typ,
+			Metadata:  metadata,
+		})
+	}
+}
 
-		if schema.metadataField != "" {
-			q += ", " + schema.metadataField + "=?"
-			args = append(args, metadata)
-		} else if metadata != nil {
-			return errors.New("metadata not enabled")
+// makeDefaultManyInserter returns the default sql manyInserter configured via WithEventsXField options.
+func makeDefaultManyInserter(schema eTableSchema) manyInserter {
+	return func(ctx context.Context, tx *sql.Tx, events ...EventToInsert) error {
+		if len(events) == 0 {
+			return nil
 		}
-
-		spanCtx, hasTrace := tracing.Extract(ctx)
-		if schema.traceField != "" && hasTrace {
-			traceData, err := tracing.Marshal(spanCtx)
-			if err != nil {
-				return err
-			}
-
-			q += ", " + schema.traceField + "=?"
-			args = append(args, traceData)
+		q, args, err := makeInsertManyQuery(ctx, schema, events)
+		if err != nil {
+			return err
 		}
-
-		_, err := tx.ExecContext(ctx, q, args...)
+		_, err = tx.ExecContext(ctx, q, args...)
 		return errors.Wrap(err, "insert error")
 	}
+}
+
+func makeInsertManyQuery(
+	ctx context.Context,
+	schema eTableSchema,
+	events []EventToInsert,
+) (query string, args []any, err error) {
+	spanCtx, hasTrace := tracing.Extract(ctx)
+	var traceData []byte
+	if schema.traceField != "" && hasTrace {
+		d, err := tracing.Marshal(spanCtx)
+		if err != nil {
+			return "", nil, err
+		}
+		traceData = d
+	}
+
+	cols := schema.foreignIDField + ", " + schema.typeField + ", " + schema.timeField
+	if schema.metadataField != "" {
+		cols += ", " + schema.metadataField
+	}
+	if traceData != nil {
+		cols += ", " + schema.traceField
+	}
+
+	q := "insert into " + schema.name + " (" + cols + ") values"
+
+	for i, e := range events {
+		vals := "?, ?, now(6)"
+		args = append(args, e.ForeignID, e.Type.ReflexType())
+		if schema.metadataField != "" {
+			vals += ", ?"
+			args = append(args, e.Metadata)
+		} else if e.Metadata != nil {
+			return "", nil, errors.New("metadata not enabled")
+		}
+		if traceData != nil {
+			vals += ", ?"
+			args = append(args, traceData)
+		}
+		if i > 0 {
+			q += ","
+		}
+		q += " (" + vals + ")"
+	}
+
+	return q, args, nil
 }
 
 type row interface {
@@ -158,7 +206,14 @@ func getNextEvents(ctx context.Context, dbc *sql.DB, schema eTableSchema,
 }
 
 // GetNextEventsForTesting fetches a bunch of events from the event table
-func GetNextEventsForTesting(ctx context.Context, _ *testing.T, dbc *sql.DB, table *EventsTable, after int64, lag time.Duration) ([]*reflex.Event, error) {
+func GetNextEventsForTesting(
+	ctx context.Context,
+	_ *testing.T,
+	dbc *sql.DB,
+	table *EventsTable,
+	after int64,
+	lag time.Duration,
+) ([]*reflex.Event, error) {
 	return getNextEvents(ctx, dbc, table.schema, after, lag)
 }
 
@@ -287,7 +342,16 @@ func makeDefaultErrorInserter(schema errTableSchema) ErrorInserter {
 	// NB: See the documentation is the following link on the behaviour of "on last_insert_id(<expr>)" https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_last-insert-id
 	q := fmt.Sprintf(
 		"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=now(6), %s=? on duplicate key update %s=last_insert_id(%s)",
-		schema.name, schema.eventConsumerField, schema.eventIDField, schema.errorMsgField, schema.errorCreatedAtField, schema.errorUpdatedAtField, schema.errorStatusField, schema.idField, schema.idField)
+		schema.name,
+		schema.eventConsumerField,
+		schema.eventIDField,
+		schema.errorMsgField,
+		schema.errorCreatedAtField,
+		schema.errorUpdatedAtField,
+		schema.errorStatusField,
+		schema.idField,
+		schema.idField,
+	)
 	return func(ctx context.Context, tx *sql.Tx, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus) (string, error) {
 		r, err := tx.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
 		// If the error has already been written then we can ignore the error

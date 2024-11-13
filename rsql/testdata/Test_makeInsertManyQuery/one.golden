@@ -1,0 +1,4 @@
+insert into events (foreign_id, type, timestamp) values (?, ?, now(6))
+
+fid
+1

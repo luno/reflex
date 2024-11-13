@@ -44,10 +44,20 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 		table.inserter = makeDefaultInserter(table.schema)
 	}
 
+	if table.manyInserter == nil {
+		table.manyInserter = makeDefaultManyInserter(table.schema)
+	}
+
 	table.gapCh = make(chan Gap)
 	table.gapListeners = make(chan GapListenFunc)
 	table.gapListenDone = make(chan struct{})
-	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.disableCache, table.schema, table.includeNoopEvents)
+	table.currentLoader = buildLoader(
+		table.baseLoader,
+		table.gapCh,
+		table.disableCache,
+		table.schema,
+		table.includeNoopEvents,
+	)
 
 	return table
 }
@@ -175,9 +185,27 @@ func WithEventsInserter(inserter inserter) EventsOption {
 	}
 }
 
+// WithEventsManyInserter provides an option to set the event inserter
+// which inserts many events into a sql table. The default inserter is
+// configured with the WithEventsXField options.
+func WithEventsManyInserter(manyInserter manyInserter) EventsOption {
+	return func(table *EventsTable) {
+		table.manyInserter = manyInserter
+	}
+}
+
 // inserter abstracts the insertion of an event into a sql table.
 type inserter func(ctx context.Context, tx *sql.Tx,
 	foreignID string, typ reflex.EventType, metadata []byte) error
+
+type EventToInsert struct {
+	ForeignID string
+	Type      reflex.EventType
+	Metadata  []byte
+}
+
+// manyInserter abstracts the insertion of many events into a sql table.
+type manyInserter func(ctx context.Context, tx *sql.Tx, events ...EventToInsert) error
 
 // EventsTable provides reflex event insertion and streaming
 // for a sql db table.
@@ -189,6 +217,7 @@ type EventsTable struct {
 	includeNoopEvents bool
 	baseLoader        loader
 	inserter          inserter
+	manyInserter      manyInserter
 
 	// Stateful fields not cloned
 	currentLoader filterLoader
@@ -223,6 +252,25 @@ func (t *EventsTable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreig
 		return nil, errors.New("inserting invalid noop event")
 	}
 	err := t.inserter(ctx, tx, foreignID, typ, metadata)
+	if err != nil {
+		return noopFunc, err
+	}
+
+	return t.notifier.Notify, nil
+}
+
+// InsertMany inserts a many events into the EventsTable.
+func (t *EventsTable) InsertMany(
+	ctx context.Context,
+	tx *sql.Tx,
+	events []EventToInsert,
+) (NotifyFunc, error) {
+	for _, e := range events {
+		if isNoop(e.ForeignID, e.Type) {
+			return nil, errors.New("inserting invalid noop event")
+		}
+	}
+	err := t.manyInserter(ctx, tx, events...)
 	if err != nil {
 		return noopFunc, err
 	}
@@ -312,7 +360,13 @@ func (t *EventsTable) getSchema() eTableSchema {
 }
 
 // buildLoader returns a new layered event loader.
-func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema eTableSchema, withNoopEvents bool) filterLoader {
+func buildLoader(
+	baseLoader loader,
+	ch chan<- Gap,
+	disableCache bool,
+	schema eTableSchema,
+	withNoopEvents bool,
+) filterLoader {
 	if baseLoader == nil {
 		baseLoader = makeBaseLoader(schema)
 	}
