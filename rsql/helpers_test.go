@@ -2,7 +2,6 @@ package rsql_test
 
 import (
 	"context"
-	"database/sql"
 	"strconv"
 	"testing"
 	"time"
@@ -19,39 +18,27 @@ func (t testEventType) ReflexType() int {
 	return int(t)
 }
 
-func insertTestEvent(dbc *sql.DB, table *rsql.EventsTable, foreignID string, typ reflex.EventType) error {
-	tx, err := dbc.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	notify, err := table.Insert(context.Background(), tx, foreignID, typ)
+func insertTestEvent(dbc rsql.DBC, table *rsql.EventsTable, foreignID string, typ reflex.EventType) error {
+	notify, err := table.Insert(context.Background(), dbc, foreignID, typ)
 	if err != nil {
 		return err
 	}
 	defer notify()
 
-	return tx.Commit()
+	return nil
 }
 
-func insertTestEventMeta(dbc *sql.DB, table *rsql.EventsTable, foreignID string,
+func insertTestEventMeta(dbc rsql.DBC, table *rsql.EventsTable, foreignID string,
 	typ reflex.EventType, metadata []byte,
 ) error {
-	tx, err := dbc.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	notify, err := table.InsertWithMetadata(context.Background(), tx, foreignID,
+	notify, err := table.InsertWithMetadata(context.Background(), dbc, foreignID,
 		typ, metadata)
 	if err != nil {
 		return err
 	}
 	defer notify()
 
-	return tx.Commit()
+	return nil
 }
 
 func i2s(i int) string {

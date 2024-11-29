@@ -11,14 +11,14 @@ import (
 )
 
 // ErrorInserter abstracts the insertion of an error into a sql table.
-type ErrorInserter func(ctx context.Context, tx *sql.Tx, consumer, eventID, errMsg string, errStatus reflex.ErrorStatus) (string, error)
+type ErrorInserter func(ctx context.Context, dbc DBC, consumer, eventID, errMsg string, errStatus reflex.ErrorStatus) (string, error)
 
 // ErrorEventInserter abstracts the insertion of an event into a sql table including providing a notification capability.
-type ErrorEventInserter func(ctx context.Context, tx *sql.Tx, foreignID string, typ reflex.EventType, metadata []byte) (NotifyFunc, error)
+type ErrorEventInserter func(ctx context.Context, dbc DBC, foreignID string, typ reflex.EventType, metadata []byte) (NotifyFunc, error)
 
 func doNothing() {}
 
-func nullEventInserter(_ context.Context, _ *sql.Tx, _ string, _ reflex.EventType, _ []byte) (NotifyFunc, error) {
+func nullEventInserter(_ context.Context, _ DBC, _ string, _ reflex.EventType, _ []byte) (NotifyFunc, error) {
 	return doNothing, nil
 }
 
