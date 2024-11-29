@@ -47,7 +47,13 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	table.gapCh = make(chan Gap)
 	table.gapListeners = make(chan GapListenFunc)
 	table.gapListenDone = make(chan struct{})
-	table.currentLoader = buildLoader(table.baseLoader, table.gapCh, table.disableCache, table.schema, table.includeNoopEvents)
+	table.currentLoader = buildLoader(
+		table.baseLoader,
+		table.gapCh,
+		table.disableCache,
+		table.schema,
+		table.includeNoopEvents,
+	)
 
 	return table
 }
@@ -176,7 +182,7 @@ func WithEventsInserter(inserter inserter) EventsOption {
 }
 
 // inserter abstracts the insertion of an event into a sql table.
-type inserter func(ctx context.Context, tx *sql.Tx,
+type inserter func(ctx context.Context, dbc DBC,
 	foreignID string, typ reflex.EventType, metadata []byte) error
 
 // EventsTable provides reflex event insertion and streaming
@@ -208,21 +214,21 @@ type EventsTable struct {
 //	}
 //	defer notify()
 //	return doWorkAndCommit(tx)
-func (t *EventsTable) Insert(ctx context.Context, tx *sql.Tx, foreignID string,
+func (t *EventsTable) Insert(ctx context.Context, dbc DBC, foreignID string,
 	typ reflex.EventType,
 ) (NotifyFunc, error) {
-	return t.InsertWithMetadata(ctx, tx, foreignID, typ, nil)
+	return t.InsertWithMetadata(ctx, dbc, foreignID, typ, nil)
 }
 
 // InsertWithMetadata inserts an event with metadata into the EventsTable.
 // Note metadata is disabled by default, enable with WithEventMetadataField option.
-func (t *EventsTable) InsertWithMetadata(ctx context.Context, tx *sql.Tx, foreignID string,
+func (t *EventsTable) InsertWithMetadata(ctx context.Context, dbc DBC, foreignID string,
 	typ reflex.EventType, metadata []byte,
 ) (NotifyFunc, error) {
 	if isNoop(foreignID, typ) {
 		return nil, errors.New("inserting invalid noop event")
 	}
-	err := t.inserter(ctx, tx, foreignID, typ, metadata)
+	err := t.inserter(ctx, dbc, foreignID, typ, metadata)
 	if err != nil {
 		return noopFunc, err
 	}
@@ -312,7 +318,13 @@ func (t *EventsTable) getSchema() eTableSchema {
 }
 
 // buildLoader returns a new layered event loader.
-func buildLoader(baseLoader loader, ch chan<- Gap, disableCache bool, schema eTableSchema, withNoopEvents bool) filterLoader {
+func buildLoader(
+	baseLoader loader,
+	ch chan<- Gap,
+	disableCache bool,
+	schema eTableSchema,
+	withNoopEvents bool,
+) filterLoader {
 	if baseLoader == nil {
 		baseLoader = makeBaseLoader(schema)
 	}

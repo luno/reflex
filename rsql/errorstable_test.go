@@ -2,7 +2,6 @@ package rsql_test
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strconv"
 	"testing"
@@ -117,7 +116,7 @@ func TestErrorsTable(t *testing.T) {
 				rsql.WithErrorUpdatedAtField("updated_at"),
 				rsql.WithErrorStatusField("error_status"),
 				rsql.WithErrorInserter(
-					func(ctx context.Context, tx *sql.Tx, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus) (string, error) {
+					func(ctx context.Context, dbc rsql.DBC, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus) (string, error) {
 						msg := "insert consumer error failed"
 						// TODO(jkilloran): Should we also reset the status to be 1 i.e. EventErrorRecorded status even if it has previously
 						//                  been handled/updated to another state. Or should we return any duplicate error in a way so we
@@ -135,7 +134,7 @@ func TestErrorsTable(t *testing.T) {
 						q := fmt.Sprintf(
 							"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=now(6), %s=? on duplicate key update id=last_insert_id(id)",
 							errorsTable, "consumer", "event_id", "error_msg", "created_at", "updated_at", "error_status")
-						r, err := tx.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
+						r, err := dbc.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
 						// If the error has already been written then we can ignore the error
 						if err != nil && !rsql.IsDuplicateErrorInsertion(err) {
 							return "", errors.Wrap(err, msg)

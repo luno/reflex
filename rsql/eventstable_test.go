@@ -2,7 +2,6 @@ package rsql_test
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -517,8 +516,8 @@ func TestInMemNotifier(t *testing.T) {
 }
 
 func TestCloneInserter(t *testing.T) {
-	makeInserter := func(i *int) func(context.Context, *sql.Tx, string, reflex.EventType, []byte) error {
-		return func(context.Context, *sql.Tx, string, reflex.EventType, []byte) error {
+	makeInserter := func(i *int) func(context.Context, rsql.DBC, string, reflex.EventType, []byte) error {
+		return func(context.Context, rsql.DBC, string, reflex.EventType, []byte) error {
 			*i++
 			return nil
 		}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/luno/reflex"
+	"github.com/luno/reflex/rsql"
 )
 
 type mockNotifier struct {
@@ -68,7 +69,7 @@ func (m *mockTable) Load(_ context.Context, _ *sql.DB, prevCursor int64,
 	return nil, nil
 }
 
-func (m *mockTable) Insert(_ context.Context, _ *sql.Tx,
+func (m *mockTable) Insert(_ context.Context, _ rsql.DBC,
 	foreignID string, typ reflex.EventType, metadata []byte,
 ) error {
 	m.events = append(m.events, &reflex.Event{
@@ -88,7 +89,7 @@ type mockErrorTable struct {
 }
 
 func (m *mockErrorTable) errorInserter(_ context.Context,
-	_ *sql.Tx, _, _, _ string, _ reflex.ErrorStatus,
+	_ rsql.DBC, _, _, _ string, _ reflex.ErrorStatus,
 ) (string, error) {
 	m.id++
 	return strconv.FormatInt(m.id, 10), nil

@@ -45,7 +45,7 @@ func (t eventType) ReflexType() int {
 
 // makeDefaultInserter returns the default sql inserter configured via WithEventsXField options.
 func makeDefaultInserter(schema eTableSchema) inserter {
-	return func(ctx context.Context, tx *sql.Tx,
+	return func(ctx context.Context, dbc DBC,
 		foreignID string, typ reflex.EventType, metadata []byte,
 	) error {
 		q := "insert into " + schema.name +
@@ -70,7 +70,7 @@ func makeDefaultInserter(schema eTableSchema) inserter {
 			args = append(args, traceData)
 		}
 
-		_, err := tx.ExecContext(ctx, q, args...)
+		_, err := dbc.ExecContext(ctx, q, args...)
 		return errors.Wrap(err, "insert error")
 	}
 }
@@ -94,7 +94,7 @@ func scan(row row) (*reflex.Event, error) {
 	return &e, err
 }
 
-func getLatestID(ctx context.Context, dbc *sql.DB, schema eTableSchema) (int64, error) {
+func getLatestID(ctx context.Context, dbc DBC, schema eTableSchema) (int64, error) {
 	var id sql.NullInt64
 	q := fmt.Sprintf("select max(%s) from %s", schema.idField, schema.name)
 	err := dbc.QueryRowContext(ctx, q).Scan(&id)
@@ -104,7 +104,7 @@ func getLatestID(ctx context.Context, dbc *sql.DB, schema eTableSchema) (int64, 
 	return id.Int64, nil
 }
 
-func getNextEvents(ctx context.Context, dbc *sql.DB, schema eTableSchema,
+func getNextEvents(ctx context.Context, dbc DBC, schema eTableSchema,
 	after int64, lag time.Duration,
 ) ([]*reflex.Event, error) {
 	var (
@@ -158,12 +158,19 @@ func getNextEvents(ctx context.Context, dbc *sql.DB, schema eTableSchema,
 }
 
 // GetNextEventsForTesting fetches a bunch of events from the event table
-func GetNextEventsForTesting(ctx context.Context, _ *testing.T, dbc *sql.DB, table *EventsTable, after int64, lag time.Duration) ([]*reflex.Event, error) {
+func GetNextEventsForTesting(
+	ctx context.Context,
+	_ *testing.T,
+	dbc DBC,
+	table *EventsTable,
+	after int64,
+	lag time.Duration,
+) ([]*reflex.Event, error) {
 	return getNextEvents(ctx, dbc, table.schema, after, lag)
 }
 
 // GetLatestIDForTesting fetches the latest event id from the event table
-func GetLatestIDForTesting(ctx context.Context, _ *testing.T, dbc *sql.DB, eventTable, idField string) (int64, error) {
+func GetLatestIDForTesting(ctx context.Context, _ *testing.T, dbc DBC, eventTable, idField string) (int64, error) {
 	return getLatestID(ctx, dbc, eTableSchema{name: eventTable, idField: idField})
 }
 
@@ -210,7 +217,7 @@ func isMySQLErr(err error, nums ...uint16) bool {
 	return false
 }
 
-func getCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema, id string) (string, time.Time, error) {
+func getCursor(ctx context.Context, dbc DBC, schema ctableSchema, id string) (string, time.Time, error) {
 	var cursor string
 	var ts time.Time
 	err := dbc.QueryRowContext(ctx, "select "+schema.cursorField+","+schema.timefield+
@@ -225,7 +232,7 @@ func getCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema, id string)
 
 // setCursor sets the processor's last successfully processed event ID to
 // `id`.
-func setCursor(ctx context.Context, dbc *sql.DB, schema ctableSchema,
+func setCursor(ctx context.Context, dbc DBC, schema ctableSchema,
 	id string, cursor string,
 ) error {
 	opts := []errors.Option{j.KS("consumer", id), j.KS("cursor", cursor)}
@@ -287,9 +294,18 @@ func makeDefaultErrorInserter(schema errTableSchema) ErrorInserter {
 	// NB: See the documentation is the following link on the behaviour of "on last_insert_id(<expr>)" https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_last-insert-id
 	q := fmt.Sprintf(
 		"insert into %s set %s=?, %s=?, %s=?, %s=now(6), %s=now(6), %s=? on duplicate key update %s=last_insert_id(%s)",
-		schema.name, schema.eventConsumerField, schema.eventIDField, schema.errorMsgField, schema.errorCreatedAtField, schema.errorUpdatedAtField, schema.errorStatusField, schema.idField, schema.idField)
-	return func(ctx context.Context, tx *sql.Tx, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus) (string, error) {
-		r, err := tx.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
+		schema.name,
+		schema.eventConsumerField,
+		schema.eventIDField,
+		schema.errorMsgField,
+		schema.errorCreatedAtField,
+		schema.errorUpdatedAtField,
+		schema.errorStatusField,
+		schema.idField,
+		schema.idField,
+	)
+	return func(ctx context.Context, dbc DBC, consumer string, eventID string, errMsg string, errStatus reflex.ErrorStatus) (string, error) {
+		r, err := dbc.ExecContext(ctx, q, consumer, eventID, errMsg, errStatus)
 		// If the error has already been written then we can ignore the error
 		if err != nil && !IsDuplicateErrorInsertion(err) {
 			return "", errors.Wrap(err, msg)
@@ -309,4 +325,11 @@ func IsDuplicateErrorInsertion(err error) bool {
 
 func quoted(name string) string {
 	return fmt.Sprintf("`%s`", name)
+}
+
+// DBC defines the required methods for sql database connection that is needed for the interaction with the database.
+type DBC interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
