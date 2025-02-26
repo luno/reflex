@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.35.0
-	github.com/go-sql-driver/mysql v1.7.1
+	github.com/go-sql-driver/mysql v1.9.0
 	github.com/luno/jettison v0.0.0-20230912135954-09d6084f5df9
 	github.com/prometheus/client_golang v1.15.0
 	github.com/prometheus/client_model v0.3.0
@@ -18,6 +18,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/aws/aws-sdk-go v1.44.284 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.18.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect
