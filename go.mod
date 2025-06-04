@@ -1,6 +1,6 @@
 module github.com/luno/reflex
 
-go 1.21
+go 1.24.3
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.35.0
