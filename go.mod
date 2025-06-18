@@ -1,6 +1,8 @@
 module github.com/luno/reflex
 
-go 1.21
+go 1.22
+
+toolchain go1.24.4
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.35.0
@@ -14,7 +16,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.14.0
 	gocloud.dev v0.30.0
 	google.golang.org/grpc v1.56.0
-	google.golang.org/protobuf v1.36.5
+	google.golang.org/protobuf v1.36.6
 )
 
 require (
