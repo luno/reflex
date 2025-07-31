@@ -47,6 +47,9 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 	table.gapCh = make(chan Gap)
 	table.gapListeners = make(chan GapListenFunc)
 	table.gapListenDone = make(chan struct{})
+	
+	// Initialize gap fill cancellation context
+	table.gapFillCtx, table.gapFillCancel = context.WithCancel(context.Background())
 	table.currentLoader = buildLoader(
 		table.baseLoader,
 		table.gapCh,
@@ -202,6 +205,11 @@ type EventsTable struct {
 	gapListeners  chan GapListenFunc
 	gapListenDone chan struct{}
 	gapListening  sync.Once
+
+	// Gap filling cancellation support
+	gapFillCtx    context.Context
+	gapFillCancel context.CancelFunc
+	gapFillMu     sync.Mutex
 }
 
 // Insert inserts an event into the EventsTable and returns a function that
@@ -285,6 +293,13 @@ func (t *EventsTable) ListenGaps(f GapListenFunc) {
 }
 
 func (t *EventsTable) StopGapListener(ctx context.Context) {
+	// Cancel any ongoing gap filling operations
+	t.gapFillMu.Lock()
+	if t.gapFillCancel != nil {
+		t.gapFillCancel()
+	}
+	t.gapFillMu.Unlock()
+
 	close(t.gapListeners)
 	select {
 	case <-ctx.Done():
@@ -315,6 +330,13 @@ func (t *EventsTable) serveGaps() {
 // getSchema returns the table schema and implements the gapTable interface for FillGaps.
 func (t *EventsTable) getSchema() eTableSchema {
 	return t.schema
+}
+
+// getGapFillContext returns the context used for gap filling operations.
+func (t *EventsTable) getGapFillContext() context.Context {
+	t.gapFillMu.Lock()
+	defer t.gapFillMu.Unlock()
+	return t.gapFillCtx
 }
 
 // buildLoader returns a new layered event loader.
