@@ -176,3 +176,33 @@ func TestStopGapFillerCanBeCancelled(t *testing.T) {
 	// This will deadlock without some other await
 	table.StopGapListener(ctx)
 }
+
+// TestGapFillCancellation tests that waitCommitted respects context cancellation
+func TestGapFillCancellation(t *testing.T) {
+	// Test the waitCommitted function directly to ensure it respects context cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	
+	// Create a mock schema
+	schema := eTableSchema{
+		name:           "test_table",
+		idField:        "id",
+		timeField:      "timestamp",
+		typeField:      "type",
+		foreignIDField: "foreign_id",
+	}
+	
+	// Cancel the context immediately
+	cancel()
+	
+	// waitCommitted should return immediately with context cancellation error
+	committed, err := waitCommitted(ctx, nil, schema, 1)
+	if err == nil {
+		t.Fatal("Expected context cancellation error, got nil")
+	}
+	if committed {
+		t.Fatal("Expected committed to be false when context is cancelled")
+	}
+	if err != context.Canceled {
+		t.Fatalf("Expected context.Canceled, got %v", err)
+	}
+}

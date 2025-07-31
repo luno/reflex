@@ -30,7 +30,7 @@ type Gap struct {
 //	...
 //	rsql.FillGaps(dbc, events)
 func FillGaps(dbc *sql.DB, gapTable gapTable) {
-	gapTable.ListenGaps(makeFill(dbc, gapTable.getSchema()))
+	gapTable.ListenGaps(makeFill(dbc, gapTable))
 }
 
 // StopFillingGaps stops any goroutine started from FillGaps
@@ -45,14 +45,16 @@ type gapTable interface {
 	ListenGaps(listenFunc GapListenFunc)
 	StopGapListener(ctx context.Context)
 	getSchema() eTableSchema
+	getGapFillContext() context.Context
 }
 
 // makeFill returns a fill function that ensures that rows exist
 // with the ids indicated by the Gap. It does so by either detecting
 // existing rows or by inserting noop events. It is idempotent.
-func makeFill(dbc *sql.DB, schema eTableSchema) func(Gap) {
+func makeFill(dbc *sql.DB, gapTable gapTable) func(Gap) {
+	schema := gapTable.getSchema()
 	return func(gap Gap) {
-		ctx := context.Background()
+		ctx := gapTable.getGapFillContext()
 		for i := gap.Prev + 1; i < gap.Next; i++ {
 			err := fillGap(ctx, dbc, schema, i)
 			if err != nil {
@@ -114,6 +116,12 @@ func exists(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64,
 // it is committed or false if it is rolled back or there is no uncommitted event at all.
 func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64) (bool, error) {
 	for {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
+		}
+
 		uncommitted, err := exists(ctx, dbc, schema, id, sql.LevelReadUncommitted)
 		if err != nil {
 			return false, err
@@ -132,6 +140,11 @@ func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int
 			return true, nil
 		}
 
-		time.Sleep(time.Millisecond * 100) // Don't spin
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(time.Millisecond * 100):
+			// Don't spin
+		}
 	}
 }
