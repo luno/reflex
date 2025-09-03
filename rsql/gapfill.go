@@ -136,5 +136,6 @@ func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, gapTab
 
 		time.Sleep(time.Millisecond * 100) // Don't spin
 	}
-	return false, nil
+	// If we exit here, it's because gapTable.isDone() returned true (shutdown)
+	return false, context.Canceled
 }
