@@ -45,7 +45,7 @@ type gapTable interface {
 	ListenGaps(listenFunc GapListenFunc)
 	StopGapListener(ctx context.Context)
 	getSchema() eTableSchema
-	getGapFillContext() context.Context
+	isDone() bool
 }
 
 // makeFill returns a fill function that ensures that rows exist
@@ -54,9 +54,9 @@ type gapTable interface {
 func makeFill(dbc *sql.DB, gapTable gapTable) func(Gap) {
 	schema := gapTable.getSchema()
 	return func(gap Gap) {
-		ctx := gapTable.getGapFillContext()
+		ctx := context.Background()
 		for i := gap.Prev + 1; i < gap.Next; i++ {
-			err := fillGap(ctx, dbc, schema, i)
+			err := fillGap(ctx, dbc, schema, gapTable, i)
 			if err != nil {
 				log.Error(ctx, errors.Wrap(err, "errors filling gap",
 					j.MKV{"table": schema.name, "id": i}))
@@ -68,9 +68,9 @@ func makeFill(dbc *sql.DB, gapTable gapTable) func(Gap) {
 
 // fillGap blocks until an event with id exists (committed) in the table or if it
 // could insert a noop event with that id.
-func fillGap(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64) error {
+func fillGap(ctx context.Context, dbc *sql.DB, schema eTableSchema, gapTable gapTable, id int64) error {
 	// Wait until the event is committed.
-	committed, err := waitCommitted(ctx, dbc, schema, id)
+	committed, err := waitCommitted(ctx, dbc, schema, gapTable, id)
 	if err != nil {
 		return err
 	}
@@ -114,14 +114,8 @@ func exists(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64,
 
 // waitCommitted blocks while an uncommitted event with id exists and returns true once
 // it is committed or false if it is rolled back or there is no uncommitted event at all.
-func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64) (bool, error) {
-	for {
-		select {
-		case <-ctx.Done():
-			return false, ctx.Err()
-		default:
-		}
-
+func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, gapTable gapTable, id int64) (bool, error) {
+	for !gapTable.isDone() {
 		uncommitted, err := exists(ctx, dbc, schema, id, sql.LevelReadUncommitted)
 		if err != nil {
 			return false, err
@@ -140,11 +134,7 @@ func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int
 			return true, nil
 		}
 
-		select {
-		case <-ctx.Done():
-			return false, ctx.Err()
-		case <-time.After(time.Millisecond * 100):
-			// Don't spin
-		}
+		time.Sleep(time.Millisecond * 100) // Don't spin
 	}
+	return false, nil
 }
