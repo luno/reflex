@@ -30,7 +30,7 @@ type Gap struct {
 //	...
 //	rsql.FillGaps(dbc, events)
 func FillGaps(dbc *sql.DB, gapTable gapTable) {
-	gapTable.ListenGaps(makeFill(dbc, gapTable.getSchema()))
+	gapTable.ListenGaps(makeFill(dbc, gapTable))
 }
 
 // StopFillingGaps stops any goroutine started from FillGaps
@@ -45,16 +45,18 @@ type gapTable interface {
 	ListenGaps(listenFunc GapListenFunc)
 	StopGapListener(ctx context.Context)
 	getSchema() eTableSchema
+	isDone() bool
 }
 
 // makeFill returns a fill function that ensures that rows exist
 // with the ids indicated by the Gap. It does so by either detecting
 // existing rows or by inserting noop events. It is idempotent.
-func makeFill(dbc *sql.DB, schema eTableSchema) func(Gap) {
+func makeFill(dbc *sql.DB, gapTable gapTable) func(Gap) {
+	schema := gapTable.getSchema()
 	return func(gap Gap) {
 		ctx := context.Background()
 		for i := gap.Prev + 1; i < gap.Next; i++ {
-			err := fillGap(ctx, dbc, schema, i)
+			err := fillGap(ctx, dbc, schema, gapTable, i)
 			if err != nil {
 				log.Error(ctx, errors.Wrap(err, "errors filling gap",
 					j.MKV{"table": schema.name, "id": i}))
@@ -66,9 +68,9 @@ func makeFill(dbc *sql.DB, schema eTableSchema) func(Gap) {
 
 // fillGap blocks until an event with id exists (committed) in the table or if it
 // could insert a noop event with that id.
-func fillGap(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64) error {
+func fillGap(ctx context.Context, dbc *sql.DB, schema eTableSchema, gapTable gapTable, id int64) error {
 	// Wait until the event is committed.
-	committed, err := waitCommitted(ctx, dbc, schema, id)
+	committed, err := waitCommitted(ctx, dbc, schema, gapTable, id)
 	if err != nil {
 		return err
 	}
@@ -112,8 +114,8 @@ func exists(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64,
 
 // waitCommitted blocks while an uncommitted event with id exists and returns true once
 // it is committed or false if it is rolled back or there is no uncommitted event at all.
-func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int64) (bool, error) {
-	for {
+func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, gapTable gapTable, id int64) (bool, error) {
+	for !gapTable.isDone() {
 		uncommitted, err := exists(ctx, dbc, schema, id, sql.LevelReadUncommitted)
 		if err != nil {
 			return false, err
@@ -134,4 +136,6 @@ func waitCommitted(ctx context.Context, dbc *sql.DB, schema eTableSchema, id int
 
 		time.Sleep(time.Millisecond * 100) // Don't spin
 	}
+	// If we exit here, it's because gapTable.isDone() returned true (shutdown)
+	return false, context.Canceled
 }

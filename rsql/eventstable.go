@@ -317,6 +317,16 @@ func (t *EventsTable) getSchema() eTableSchema {
 	return t.schema
 }
 
+// isDone returns true if the gap listener has been stopped by checking if the done channel is closed.
+func (t *EventsTable) isDone() bool {
+	select {
+	case <-t.gapListenDone:
+		return true
+	default:
+		return false
+	}
+}
+
 // buildLoader returns a new layered event loader.
 func buildLoader(
 	baseLoader loader,
