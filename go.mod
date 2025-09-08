@@ -7,14 +7,14 @@ require (
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/luno/jettison v0.0.0-20230912135954-09d6084f5df9
 	github.com/prometheus/client_golang v1.21.1
-	github.com/prometheus/client_model v0.6.1
+	github.com/prometheus/client_model v0.6.2
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/otel v1.14.0
 	go.opentelemetry.io/otel/sdk v1.14.0
 	go.opentelemetry.io/otel/trace v1.14.0
 	gocloud.dev v0.30.0
 	google.golang.org/grpc v1.56.0
-	google.golang.org/protobuf v1.36.5
+	google.golang.org/protobuf v1.36.6
 )
 
 require (
