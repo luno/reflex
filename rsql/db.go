@@ -79,6 +79,9 @@ type row interface {
 	Scan(dest ...interface{}) error
 }
 
+// scan scans a database row into a reflex.Event, mapping columns to the event's fields.
+// The expected column order is: id, foreign_id, time, type, metadata, trace.
+// It returns a pointer to the populated Event, or an error from Scan.
 func scan(row row) (*reflex.Event, error) {
 	var (
 		e  reflex.Event
@@ -94,6 +97,8 @@ func scan(row row) (*reflex.Event, error) {
 	return &e, err
 }
 
+// scanWithMetrics scans a database row into a reflex.Event while recording deserialization metrics for the specified table.
+// It returns the scanned Event or an error encountered while scanning.
 func scanWithMetrics(row row, tableName string) (*reflex.Event, error) {
 	start := time.Now()
 	defer func() {
@@ -107,6 +112,9 @@ func scanWithMetrics(row row, tableName string) (*reflex.Event, error) {
 	return event, err
 }
 
+// getLatestID retrieves the maximum value of the configured id field from the event table in schema.
+// It returns 0 if the table contains no rows or the result is NULL, otherwise the maximum id value.
+// An error is returned when the query fails.
 func getLatestID(ctx context.Context, dbc DBC, schema eTableSchema) (int64, error) {
 	var id sql.NullInt64
 	q := fmt.Sprintf("select max(%s) from %s", schema.idField, schema.name)
@@ -117,6 +125,10 @@ func getLatestID(ctx context.Context, dbc DBC, schema eTableSchema) (int64, erro
 	return id.Int64, nil
 }
 
+// getNextEvents fetches up to 1000 events from the configured event table with an id greater than `after`.
+// It selects id, foreign id, timestamp, type and the configured metadata and trace fields (or NULL when those fields are not configured),
+// optionally restricting results to events older than the provided `lag` duration.
+// The function records a per-table loading duration metric and returns the retrieved events in ascending id order or an error.
 func getNextEvents(ctx context.Context, dbc DBC, schema eTableSchema,
 	after int64, lag time.Duration,
 ) ([]*reflex.Event, error) {
