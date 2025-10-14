@@ -83,10 +83,12 @@ var (
 	}, []string{"table"})
 )
 
+// makeCursorSetCounter returns a function that increments the cursors_table "set_total" counter for the specified table.
 func makeCursorSetCounter(table string) func() {
 	return cursorSetCounter.WithLabelValues(table).Inc
 }
 
+// init registers the package's Prometheus metrics with the default Prometheus registry.
 func init() {
 	prometheus.MustRegister(cursorSetCounter)
 	prometheus.MustRegister(eventsPollCounter)
