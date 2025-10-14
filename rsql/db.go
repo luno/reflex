@@ -98,10 +98,13 @@ func scanWithMetrics(row row, tableName string) (*reflex.Event, error) {
 	start := time.Now()
 	defer func() {
 		eventsDeserializationDuration.WithLabelValues(tableName).Observe(time.Since(start).Seconds())
-		eventsDeserializedCounter.WithLabelValues(tableName).Inc()
 	}()
 
-	return scan(row)
+	event, err := scan(row)
+	if err == nil {
+		eventsDeserializedCounter.WithLabelValues(tableName).Inc()
+	}
+	return event, err
 }
 
 func getLatestID(ctx context.Context, dbc DBC, schema eTableSchema) (int64, error) {
