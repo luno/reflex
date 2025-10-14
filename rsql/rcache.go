@@ -117,7 +117,6 @@ func (c *rcache) maybeHitUnsafe(from int64, lag time.Duration) ([]*reflex.Event,
 func (c *rcache) readThrough(ctx context.Context, dbc *sql.DB,
 	prev int64, lag time.Duration,
 ) ([]*reflex.Event, error) {
-	// First, do a quick read-lock check
 	c.mu.RLock()
 	res, ok := c.maybeHitUnsafe(prev+1, lag)
 	c.mu.RUnlock()
