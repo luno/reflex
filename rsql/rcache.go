@@ -117,15 +117,16 @@ func (c *rcache) maybeHitUnsafe(from int64, lag time.Duration) ([]*reflex.Event,
 func (c *rcache) readThrough(ctx context.Context, dbc *sql.DB,
 	prev int64, lag time.Duration,
 ) ([]*reflex.Event, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Recheck cache after waiting for lock
+	// First, do a quick read-lock check
+	c.mu.RLock()
 	res, ok := c.maybeHitUnsafe(prev+1, lag)
+	c.mu.RUnlock()
+
 	if !cacheDisabled && ok {
 		return res, nil
 	}
 
+	// Perform database load WITHOUT holding any cache locks
 	res, err := c.loader(ctx, dbc, prev, lag)
 	if err != nil {
 		return nil, err
@@ -141,8 +142,11 @@ func (c *rcache) readThrough(ctx context.Context, dbc *sql.DB,
 		}
 	}
 
+	// Only acquire write lock to update cache, minimizing lock time
+	c.mu.Lock()
 	c.maybeUpdateUnsafe(res)
 	c.maybeTrimUnsafe()
+	c.mu.Unlock()
 
 	return res, nil
 }
