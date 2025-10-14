@@ -94,6 +94,19 @@ func scan(row row) (*reflex.Event, error) {
 	return &e, err
 }
 
+func scanWithMetrics(row row, tableName string) (*reflex.Event, error) {
+	start := time.Now()
+	defer func() {
+		eventsDeserializationDuration.WithLabelValues(tableName).Observe(time.Since(start).Seconds())
+	}()
+
+	event, err := scan(row)
+	if err == nil {
+		eventsDeserializedCounter.WithLabelValues(tableName).Inc()
+	}
+	return event, err
+}
+
 func getLatestID(ctx context.Context, dbc DBC, schema eTableSchema) (int64, error) {
 	var id sql.NullInt64
 	q := fmt.Sprintf("select max(%s) from %s", schema.idField, schema.name)
@@ -107,6 +120,11 @@ func getLatestID(ctx context.Context, dbc DBC, schema eTableSchema) (int64, erro
 func getNextEvents(ctx context.Context, dbc DBC, schema eTableSchema,
 	after int64, lag time.Duration,
 ) ([]*reflex.Event, error) {
+	start := time.Now()
+	defer func() {
+		eventsLoadingDuration.WithLabelValues(schema.name).Observe(time.Since(start).Seconds())
+	}()
+
 	var (
 		q    string
 		args []interface{}
@@ -146,7 +164,7 @@ func getNextEvents(ctx context.Context, dbc DBC, schema eTableSchema,
 
 	var el []*reflex.Event
 	for rows.Next() {
-		batch, err := scan(rows)
+		batch, err := scanWithMetrics(rows, schema.name)
 		if err != nil {
 			return nil, err
 		}

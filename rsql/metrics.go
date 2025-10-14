@@ -58,6 +58,29 @@ var (
 		Name:      "rcache_misses_total",
 		Help:      "Total number of read-through cache misses per table",
 	}, []string{"table"})
+
+	eventsDeserializationDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "reflex",
+		Subsystem: "events_table",
+		Name:      "deserialization_duration_seconds",
+		Help:      "Time spent deserializing events from database rows to reflex.Event objects",
+		Buckets:   []float64{0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10},
+	}, []string{"table"})
+
+	eventsLoadingDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "reflex",
+		Subsystem: "events_table",
+		Name:      "loading_duration_seconds",
+		Help:      "Time spent loading and deserializing batches of events from database",
+		Buckets:   []float64{0.001, 0.01, 0.1, 1, 10, 60},
+	}, []string{"table"})
+
+	eventsDeserializedCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "reflex",
+		Subsystem: "events_table",
+		Name:      "events_deserialized_total",
+		Help:      "Total number of events deserialized from database rows",
+	}, []string{"table"})
 )
 
 func makeCursorSetCounter(table string) func() {
@@ -73,4 +96,7 @@ func init() {
 	prometheus.MustRegister(eventsGapFilledCounter)
 	prometheus.MustRegister(eventsGapListenGauge)
 	prometheus.MustRegister(eventsBlockingGapGauge)
+	prometheus.MustRegister(eventsDeserializationDuration)
+	prometheus.MustRegister(eventsLoadingDuration)
+	prometheus.MustRegister(eventsDeserializedCounter)
 }
