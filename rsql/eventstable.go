@@ -28,6 +28,7 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 			foreignIDField: defaultEventForeignIDField,
 			metadataField:  defaultMetadataField,
 			traceField:     defaultTraceField,
+			limit:          defaultLimit,
 		},
 		options: options{
 			notifier: &stubNotifier{},
@@ -98,6 +99,14 @@ func WithEventForeignIDField(field string) EventsOption {
 func WithEventMetadataField(field string) EventsOption {
 	return func(table *EventsTable) {
 		table.schema.metadataField = field
+	}
+}
+
+// WithEventLookupLimit provides an option to set the limit of events that get looked up at once. The default is 1000.
+// This should be used carefully as it will increase memory usage when set too high.
+func WithEventLookupLimit(limit int) EventsOption {
+	return func(table *EventsTable) {
+		table.schema.limit = limit
 	}
 }
 
@@ -366,6 +375,7 @@ type eTableSchema struct {
 	foreignIDField string
 	metadataField  string
 	traceField     string
+	limit          int
 }
 
 type streamClient struct {
