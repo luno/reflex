@@ -94,7 +94,7 @@ func WithEventForeignIDField(field string) EventsOption {
 }
 
 // WithEventMetadataField provides an option to set the event DB metadata field.
-// It is disabled by default; ie. ”.
+// The provided field name is stored in the EventsTable schema and used for reading and writing event metadata.
 func WithEventMetadataField(field string) EventsOption {
 	return func(table *EventsTable) {
 		table.schema.metadataField = field
@@ -102,14 +102,16 @@ func WithEventMetadataField(field string) EventsOption {
 }
 
 // WithEventLookupLimit provides an option to set the limit of events that get looked up at once. The default is 1000.
-// This should be used carefully as it will increase memory usage when set too high.
+// WithEventLookupLimit sets the maximum number of events fetched in a single lookup for the table.
+// Use with care: higher limits increase memory usage.
 func WithEventLookupLimit(limit int) EventsOption {
 	return func(table *EventsTable) {
 		table.schema.limit = limit
 	}
 }
 
-// WithEventTraceField provides an option to persist an opentelemetry trace through the events stream
+// WithEventTraceField sets the events table schema field used to persist an OpenTelemetry trace through the events stream.
+// The field parameter is the column name used to store the trace.
 func WithEventTraceField(field string) EventsOption {
 	return func(table *EventsTable) {
 		table.schema.traceField = field

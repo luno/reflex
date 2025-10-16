@@ -117,6 +117,14 @@ func getLatestID(ctx context.Context, dbc DBC, schema eTableSchema) (int64, erro
 	return id.Int64, nil
 }
 
+// getNextEvents retrieves events from the table described by schema.
+// It returns events with an id greater than after, ordered by id ascending,
+// limited to schema.limit when > 0 or to 1000 otherwise.
+// If lag is greater than zero, only events with timeField older than now minus
+// lag seconds are included.
+//
+ // The returned slice contains the deserialised reflex.Event values in
+ // ascending id order, or an error if the query or row scanning fails.
 func getNextEvents(ctx context.Context, dbc DBC, schema eTableSchema,
 	after int64, lag time.Duration,
 ) ([]*reflex.Event, error) {
