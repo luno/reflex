@@ -486,6 +486,44 @@ func TestMetadata(t *testing.T) {
 	require.Equal(t, []byte(nil), e.MetaData)
 }
 
+func TestLimit(t *testing.T) {
+	t.Run("Limit lower than default", func(t *testing.T) {
+		ev := DefaultEventTable()
+		dbc := ConnectTestDB(t, ev, DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
+
+		table := rsql.NewEventsTable(eventsTable, rsql.WithEventLookupLimit(10))
+
+		for i := 0; i < 1_000; i++ {
+			err := insertTestEvent(dbc, table, i2s(i), testEventType(1))
+			require.NoError(t, err)
+		}
+
+		el, err := rsql.GetNextEventsForTesting(context.Background(), t, dbc, table, 0, 0)
+		require.NoError(t, err)
+
+		// Ensure batch length is not the default of 1,000 but rather the explicitly set 10.
+		require.Len(t, el, 10)
+	})
+
+	t.Run("Limit higher than default", func(t *testing.T) {
+		ev := DefaultEventTable()
+		dbc := ConnectTestDB(t, ev, DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
+
+		table := rsql.NewEventsTable(eventsTable, rsql.WithEventLookupLimit(2_000))
+
+		for i := 0; i < 5_000; i++ {
+			err := insertTestEvent(dbc, table, i2s(i), testEventType(1))
+			require.NoError(t, err)
+		}
+
+		el, err := rsql.GetNextEventsForTesting(context.Background(), t, dbc, table, 0, 0)
+		require.NoError(t, err)
+
+		// Ensure batch length is not the default of 1,000 but rather the explicitly set 2,000.
+		require.Len(t, el, 2_000)
+	})
+}
+
 func TestInMemNotifier(t *testing.T) {
 	dbc := ConnectTestDB(t, DefaultEventTable(), DefaultCursorTable(), DefaultErrorTable(), DefaultErrorEventTable())
 

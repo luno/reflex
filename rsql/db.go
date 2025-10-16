@@ -152,7 +152,11 @@ func getNextEvents(ctx context.Context, dbc DBC, schema eTableSchema,
 		args = append(args, lag.Seconds())
 	}
 
-	q += " order by " + schema.idField + " asc limit 1000"
+	if schema.limit > 0 {
+		q += " order by " + schema.idField + " asc limit " + strconv.Itoa(schema.limit)
+	} else {
+		q += " order by " + schema.idField + " asc limit 1000"
+	}
 
 	rows, err := dbc.QueryContext(ctx, q, args...)
 	if err != nil {
