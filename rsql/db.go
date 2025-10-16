@@ -23,6 +23,7 @@ const (
 	defaultEventForeignIDField = "foreign_id"
 	defaultMetadataField       = "" // disabled
 	defaultTraceField          = "" // default is empty to support backwards compatibility
+	defaultLimit               = 1_000
 
 	defaultErrorTable              = "consumer_errors"
 	defaultErrorEventsSuffix       = "_events"

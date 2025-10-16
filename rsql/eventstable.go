@@ -28,6 +28,7 @@ func NewEventsTable(name string, opts ...EventsOption) *EventsTable {
 			foreignIDField: defaultEventForeignIDField,
 			metadataField:  defaultMetadataField,
 			traceField:     defaultTraceField,
+			limit:          defaultLimit,
 		},
 		options: options{
 			notifier: &stubNotifier{},
