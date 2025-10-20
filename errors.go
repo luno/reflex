@@ -26,7 +26,7 @@ var (
 	cancelProto   = status.FromContextError(context.Canceled).Proto()
 	deadlineProto = status.FromContextError(context.DeadlineExceeded).Proto()
 
-	filterErr = errors.New(filterErrMsg)
+	filterErr = errors.New(filterErrMsg, j.C("ERR_d5e8f7a9b2c3d4e5"))
 )
 
 // IsStoppedErr checks whether err is an ErrStopped
@@ -60,5 +60,5 @@ func IsFilterErr(err error) bool {
 }
 
 func asFilterErr(err error) error {
-	return errors.Wrap(err, filterErrMsg)
+	return errors.Wrap(err, filterErrMsg, j.C("ERR_d5e8f7a9b2c3d4e5"))
 }
