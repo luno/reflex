@@ -4,10 +4,16 @@ import (
 	"testing"
 
 	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/j"
 	"github.com/luno/jettison/jtest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/luno/reflex"
+)
+
+var (
+	testBadMetadataErr = errors.New("bad metadata", j.C("ERR_test_bad_metadata"))
+	testBadFilterErr   = errors.New("bad filter", j.C("ERR_test_bad_filter"))
 )
 
 func TestMakeMetadataEventFilter(t *testing.T) {
@@ -74,12 +80,12 @@ func TestMetadataEventFilter(t *testing.T) {
 			name: "Deserializer errors",
 			e:    &reflex.Event{MetaData: m},
 			ds: func(x *testing.T) Deserializer[string] {
-				return func(b []byte) (string, error) { require.Equal(x, m, b); return string(b), errors.New("bad metadata") }
+				return func(b []byte) (string, error) { require.Equal(x, m, b); return string(b), testBadMetadataErr }
 			},
 			flt: func(x *testing.T) DataFilter[string] {
 				return func(s string) (bool, error) { require.Fail(x, "should not be reached"); return true, nil }
 			},
-			err: []error{deserializationErr, errors.New("bad metadata")},
+			err: []error{deserializationErr, testBadMetadataErr},
 		},
 		{
 			name: "Data Filter errors",
@@ -88,9 +94,9 @@ func TestMetadataEventFilter(t *testing.T) {
 				return func(b []byte) (string, error) { require.Equal(x, m, b); return string(b), nil }
 			},
 			flt: func(x *testing.T) DataFilter[string] {
-				return func(s string) (bool, error) { require.Equal(x, d, s); return true, errors.New("bad filter") }
+				return func(s string) (bool, error) { require.Equal(x, d, s); return true, testBadFilterErr }
 			},
-			err: []error{errors.New("bad filter")},
+			err: []error{testBadFilterErr},
 		},
 		{
 			name: "Exclude",
@@ -159,7 +165,7 @@ func TestIsDeserializationErr(t *testing.T) {
 		{
 			name: "constructed deserialization error",
 			err:  errors.New(deserializationErrMsg),
-			want: true,
+			want: false,
 		},
 	}
 	for _, tt := range tests {
