@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strconv"
 	"testing"
 	"time"
@@ -243,6 +244,10 @@ func isMySQLErr(err error, nums ...uint16) bool {
 func getCursor(ctx context.Context, dbc DBC, schema ctableSchema, id string) (string, time.Time, error) {
 	var cursor string
 	var ts time.Time
+	if !isValidIdentifier(schema.cursorField) || !isValidIdentifier(schema.timefield) ||
+		!isValidIdentifier(schema.name) || !isValidIdentifier(schema.idField) {
+		return "", time.Time{}, errors.New("invalid schema identifier")
+	}
 	err := dbc.QueryRowContext(ctx, "select "+schema.cursorField+","+schema.timefield+
 		" from "+schema.name+" where "+schema.idField+"=?", id).Scan(&cursor, &ts)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -266,6 +271,10 @@ func setCursor(ctx context.Context, dbc DBC, schema ctableSchema,
 		return err
 	}
 
+	if !isValidIdentifier(schema.name) || !isValidIdentifier(schema.cursorField) ||
+		!isValidIdentifier(schema.timefield) || !isValidIdentifier(schema.idField) {
+		return errors.New("invalid schema identifier")
+	}
 	res, err := dbc.ExecContext(ctx, "update "+schema.name+
 		" set "+schema.cursorField+"=?, "+schema.timefield+"=now() where "+schema.idField+"=?"+
 		" and "+schema.cursorField+"<?",
@@ -284,6 +293,10 @@ func setCursor(ctx context.Context, dbc DBC, schema ctableSchema,
 	}
 
 	// Insert since rows == 0
+	if !isValidIdentifier(schema.name) || !isValidIdentifier(schema.idField) ||
+		!isValidIdentifier(schema.cursorField) || !isValidIdentifier(schema.timefield) {
+		return errors.New("invalid schema identifier")
+	}
 	_, err = dbc.ExecContext(ctx, "insert into "+schema.name+" set "+schema.idField+"=?, "+
 		schema.cursorField+"=?, "+schema.timefield+"=now()", id, c)
 	if isMySQLErrDupEntry(err) {
