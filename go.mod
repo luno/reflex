@@ -3,7 +3,7 @@ module github.com/luno/reflex
 go 1.24.3
 
 require (
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/luno/jettison v0.0.0-20230912135954-09d6084f5df9
 	github.com/prometheus/client_golang v1.23.2
