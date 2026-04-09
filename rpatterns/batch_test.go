@@ -17,6 +17,12 @@ import (
 	"github.com/luno/reflex/rpatterns"
 )
 
+const (
+	msgEventAlreadyProcessed = "event id already processed"
+	msgTestTimedOut          = "test timed out"
+	msgEventNotProcessed     = "event id %d not processed"
+)
+
 func TestRunBatchConsumer(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -301,7 +307,7 @@ func TestContextCancelled(t *testing.T) {
 			}
 			for _, b := range batch {
 				_, ok := processTracker[b.IDInt()]
-				assert.False(t, ok, "event id already processed", b.ID)
+				assert.False(t, ok, msgEventAlreadyProcessed, b.ID)
 
 				processTracker[b.IDInt()] = true
 				for _, can := range cancelCtxEvents {
@@ -341,7 +347,7 @@ func TestContextCancelled(t *testing.T) {
 		case <-chDone:
 			isDone = true
 		case <-time.After(time.Second * 5):
-			assert.Fail(t, "test timed out")
+			assert.Fail(t, msgTestTimedOut)
 			isDone = true
 		}
 
@@ -353,7 +359,7 @@ func TestContextCancelled(t *testing.T) {
 	for idx := 1; idx <= events.Max; idx++ {
 		_, ok := processTracker[int64(idx)]
 		if !ok {
-			assert.Equal(t, true, ok, fmt.Sprintf("event id %d not processed", idx))
+			assert.Equal(t, true, ok, fmt.Sprintf(msgEventNotProcessed, idx))
 		}
 	}
 }
@@ -377,7 +383,7 @@ func TestBatchPeriod(t *testing.T) {
 		func(ctx context.Context, batch rpatterns.Batch) error {
 			for _, b := range batch {
 				_, ok := processTracker[b.IDInt()]
-				assert.False(t, ok, "event id already processed", b.ID)
+				assert.False(t, ok, msgEventAlreadyProcessed, b.ID)
 
 				processTracker[b.IDInt()] = true
 				if b.IDInt() == int64(events.Max) {
@@ -400,13 +406,13 @@ func TestBatchPeriod(t *testing.T) {
 	select {
 	case <-chDone:
 	case <-time.After(time.Second * 5):
-		assert.Fail(t, "test timed out")
+		assert.Fail(t, msgTestTimedOut)
 	}
 
 	for idx := 1; idx <= events.Max; idx++ {
 		_, ok := processTracker[int64(idx)]
 		if !ok {
-			assert.Equal(t, true, ok, fmt.Sprintf("event id %d not processed", idx))
+			assert.Equal(t, true, ok, fmt.Sprintf(msgEventNotProcessed, idx))
 		}
 	}
 }
@@ -448,7 +454,7 @@ func TestBatchErrorState(t *testing.T) {
 				defer tMu.Unlock()
 				for _, b := range batch {
 					_, ok := processTracker[b.IDInt()]
-					assert.False(t, ok, "event id already processed", b.ID)
+					assert.False(t, ok, msgEventAlreadyProcessed, b.ID)
 
 					processTracker[b.IDInt()] = true
 				}
@@ -474,7 +480,7 @@ func TestBatchErrorState(t *testing.T) {
 	case err := <-chErr:
 		assert.True(t, errors.Is(err, rpatterns.ErrBatchState))
 	case <-time.After(time.Second * 5):
-		assert.Fail(t, "test timed out")
+		assert.Fail(t, msgTestTimedOut)
 	}
 
 	// Cursor would be on event 2 which is the one that triggers the ErrBatchState
@@ -492,7 +498,7 @@ func TestBatchErrorState(t *testing.T) {
 		time.Sleep(time.Millisecond * 100) // Wait for last event to process since it's a background process
 		// Batch recovered
 	case <-time.After(time.Second * 5):
-		assert.Fail(t, "test timed out")
+		assert.Fail(t, msgTestTimedOut)
 	}
 
 	for idx := 1; idx <= events.Max; idx++ {
@@ -500,7 +506,7 @@ func TestBatchErrorState(t *testing.T) {
 		_, ok := processTracker[int64(idx)]
 		tMu.Unlock()
 		if !ok {
-			assert.Equal(t, true, ok, fmt.Sprintf("event id %d not processed", idx))
+			assert.Equal(t, true, ok, fmt.Sprintf(msgEventNotProcessed, idx))
 		}
 	}
 }
