@@ -105,7 +105,6 @@ func TestRunBatchConsumer(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	recvEndErr := errors.New("recv error")
 	tests := []struct {
 		name       string
 		batchLen   int
@@ -146,13 +145,13 @@ func TestReset(t *testing.T) {
 			spec := rpatterns.NewBatchSpec(b.Stream, consumer)
 			ctx := context.Background()
 			err := reflex.Run(ctx, spec)
-			jtest.Assert(t, recvEndErr, err)
+			jtest.Assert(t, errEvents, err)
 
 			events = ItoEList(tt.passEvents...)
 			b.events = events
 
 			err = reflex.Run(ctx, spec)
-			jtest.Assert(t, recvEndErr, err)
+			jtest.Assert(t, errEvents, err)
 		})
 	}
 }

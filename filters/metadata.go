@@ -18,8 +18,8 @@ const (
 )
 
 var (
-	metadataEventFilterErr = errors.New(metadataEventFilterErrMsg)
-	deserializationErr     = errors.New(deserializationErrMsg)
+	metadataEventFilterErr = errors.New(metadataEventFilterErrMsg, j.C("ERR_1a5f8c3e7b2d4f09"))
+	deserializationErr     = errors.New(deserializationErrMsg, j.C("ERR_7e3f5b8a1c4d2e96"))
 )
 
 func MetadataEventFilter[T any](ds Deserializer[T], flt DataFilter[T]) (reflex.EventFilter, error) {
@@ -45,7 +45,7 @@ func IsDeserializationErr(err error) bool {
 }
 
 func asDeserializationErr(err error) error {
-	return errors.Wrap(err, deserializationErrMsg)
+	return errors.Wrap(err, deserializationErrMsg, j.C("ERR_7e3f5b8a1c4d2e96"))
 }
 
 // IsMetadataEventFilterErr returns true if the error occurred during construction of a MetadataEventFilter.
@@ -54,5 +54,6 @@ func IsMetadataEventFilterErr(err error) bool {
 }
 
 func makeMetadataEventFilterErr(ol ...errors.Option) error {
+	ol = append(ol, j.C("ERR_1a5f8c3e7b2d4f09"))
 	return errors.New(metadataEventFilterErrMsg, ol...)
 }

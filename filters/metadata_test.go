@@ -159,7 +159,7 @@ func TestIsDeserializationErr(t *testing.T) {
 		{
 			name: "constructed deserialization error",
 			err:  errors.New(deserializationErrMsg),
-			want: true,
+			want: false,
 		},
 	}
 	for _, tt := range tests {
