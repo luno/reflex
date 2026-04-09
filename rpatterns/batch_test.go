@@ -170,7 +170,7 @@ func TestInvalidConfig(t *testing.T) {
 	spec := rpatterns.NewBatchSpec(b.Stream, consumer)
 	ctx := context.Background()
 	err := reflex.Run(ctx, spec)
-	jtest.Assert(t, errors.New("batchPeriod or batchLen must be non-zero"), err)
+	jtest.Assert(t, rpatterns.ErrInvalidBatchConfig, err)
 }
 
 type EventList struct {
