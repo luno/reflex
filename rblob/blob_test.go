@@ -127,7 +127,7 @@ func TestWaitForMore(t *testing.T) {
 	sc, err := s.Stream(context.Background(), "")
 	require.NoError(t, err)
 
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		_, err := sc.Recv()
 		jtest.Require(t, nil, err)
 	}

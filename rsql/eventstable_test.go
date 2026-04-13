@@ -180,15 +180,13 @@ func TestNoDeadlockGap(t *testing.T) {
 	assert.NoError(t, err)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		sc2, err := table.ToStream(dbc)(context.Background(), "1")
 		assert.NoError(t, err)
 
 		_, err = sc2.Recv()
 		require.NoError(t, err)
-		wg.Done()
-	}()
+	})
 
 	// This should block until delay, then return 3 (noop(2) is filtered out).
 	assertEvent(t, sc1, 3)
@@ -396,7 +394,7 @@ func TestRandomGaps(t *testing.T) {
 	// N concurrent transactions that sleep and commit or rollback.
 	const n = 8
 	var inserted int64
-	for i := 0; i < n; i++ {
+	for i := range n {
 		tx, err := dbc.Begin()
 		require.NoError(t, err)
 
@@ -493,7 +491,7 @@ func TestLimit(t *testing.T) {
 
 		table := rsql.NewEventsTable(eventsTable, rsql.WithEventLookupLimit(10))
 
-		for i := 0; i < 1_000; i++ {
+		for i := range 1_000 {
 			err := insertTestEvent(dbc, table, i2s(i), testEventType(1))
 			require.NoError(t, err)
 		}
@@ -511,7 +509,7 @@ func TestLimit(t *testing.T) {
 
 		table := rsql.NewEventsTable(eventsTable, rsql.WithEventLookupLimit(2_000))
 
-		for i := 0; i < 5_000; i++ {
+		for i := range 5_000 {
 			err := insertTestEvent(dbc, table, i2s(i), testEventType(1))
 			require.NoError(t, err)
 		}

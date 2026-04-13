@@ -110,7 +110,7 @@ func TestAsyncSetCursor(t *testing.T) {
 	s.UnblockOnce()
 	waitForResult(t, 2, s.Count)
 
-	getCursor := func() interface{} {
+	getCursor := func() any {
 		c, err := ct.GetCursor(context.Background(), dbc, "test")
 		require.NoError(t, err)
 		return c

@@ -20,7 +20,7 @@ var (
 
 func makeExpected(size int) []string {
 	var exp []string
-	for i := 0; i < size; i++ {
+	for range size {
 		exp = append(exp, consumerErr.Error())
 	}
 	return exp

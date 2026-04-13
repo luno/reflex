@@ -111,7 +111,7 @@ func appendMofN(base string, m, n int) string {
 func ConsumerShards(name string, n int, opts ...ParallelOption) []ConsumerShard {
 	conf := getParallelConfig(opts)
 	ret := make([]ConsumerShard, 0, n)
-	for m := 0; m < n; m++ {
+	for m := range n {
 		shardName := conf.fmtName(name, m, n)
 		pc := ConsumerShard{
 			Name:         shardName,
@@ -191,7 +191,7 @@ func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.S
 	cstore reflex.CursorStore, opts ...ParallelOption,
 ) {
 	conf := getParallelConfig(opts)
-	for m := 0; m < n; m++ {
+	for m := range n {
 		m := m
 		consumerM := makeConsumer(conf, m, n, getConsumer(m))
 		gcf := func() context.Context {
@@ -212,7 +212,7 @@ func Parallel(getCtx getCtxFn, getConsumer getConsumerFn, n int, stream reflex.S
 // cursors.
 func ParallelAck(getCtx getCtxFn, getConsumer getAckConsumerFn, n int, stream reflex.StreamFunc, opts ...ParallelOption) {
 	conf := getParallelConfig(opts)
-	for m := 0; m < n; m++ {
+	for m := range n {
 		m := m
 		consumerM := makeAckConsumer(conf, m, n, getConsumer(m))
 		gcf := func() context.Context {
