@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func makeDefaultInserter(schema eTableSchema) inserter {
 	) error {
 		q := "insert into " + schema.name +
 			" set " + schema.foreignIDField + "=?, " + schema.timeField + "=now(6), " + schema.typeField + "=?"
-		args := []interface{}{foreignID, typ.ReflexType()}
+		args := []any{foreignID, typ.ReflexType()}
 
 		if schema.metadataField != "" {
 			q += ", " + schema.metadataField + "=?"
@@ -77,7 +78,7 @@ func makeDefaultInserter(schema eTableSchema) inserter {
 }
 
 type row interface {
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 }
 
 func scan(row row) (*reflex.Event, error) {
@@ -128,7 +129,7 @@ func getNextEvents(ctx context.Context, dbc DBC, schema eTableSchema,
 
 	var (
 		q    string
-		args []interface{}
+		args []any
 	)
 
 	q += "select " + schema.idField + ", " + schema.foreignIDField + ", " + schema.timeField + ", " + schema.typeField
@@ -232,12 +233,7 @@ func isMySQLErr(err error, nums ...uint16) bool {
 		return false
 	}
 
-	for _, num := range nums {
-		if me.Number == num {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(nums, me.Number)
 }
 
 func getCursor(ctx context.Context, dbc DBC, schema ctableSchema, id string) (string, time.Time, error) {

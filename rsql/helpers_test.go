@@ -45,7 +45,7 @@ func i2s(i int) string {
 	return strconv.Itoa(i)
 }
 
-func assertEqualI2S(t *testing.T, expected int, actual string, msgAndArgs ...interface{}) {
+func assertEqualI2S(t *testing.T, expected int, actual string, msgAndArgs ...any) {
 	assert.Equal(t, i2s(expected), actual, msgAndArgs)
 }
 
