@@ -1,11 +1,11 @@
 module github.com/luno/reflex
 
-go 1.25
+go 1.26.0
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.1
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/luno/jettison v0.0.0-20260328151427-502b299c2358
+	github.com/luno/jettison v0.0.0-20260409100325-ee7912824954
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/stretchr/testify v1.11.1
