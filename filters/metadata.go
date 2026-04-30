@@ -15,11 +15,14 @@ type (
 const (
 	deserializationErrMsg     = "deserialization failed"
 	metadataEventFilterErrMsg = "cannot make a MetadataEventFilter from a nil Deserializer or DataFilter"
+
+	metadataEventFilterErrCode = "ERR_1a5f8c3e7b2d4f09"
+	deserializationErrCode     = "ERR_7e3f5b8a1c4d2e96"
 )
 
 var (
-	metadataEventFilterErr = errors.New(metadataEventFilterErrMsg)
-	deserializationErr     = errors.New(deserializationErrMsg)
+	metadataEventFilterErr = errors.New(metadataEventFilterErrMsg, j.C(metadataEventFilterErrCode))
+	deserializationErr     = errors.New(deserializationErrMsg, j.C(deserializationErrCode))
 )
 
 func MetadataEventFilter[T any](ds Deserializer[T], flt DataFilter[T]) (reflex.EventFilter, error) {
@@ -45,7 +48,7 @@ func IsDeserializationErr(err error) bool {
 }
 
 func asDeserializationErr(err error) error {
-	return errors.Wrap(err, deserializationErrMsg)
+	return errors.Wrap(err, deserializationErrMsg, j.C(deserializationErrCode))
 }
 
 // IsMetadataEventFilterErr returns true if the error occurred during construction of a MetadataEventFilter.
@@ -54,5 +57,6 @@ func IsMetadataEventFilterErr(err error) bool {
 }
 
 func makeMetadataEventFilterErr(ol ...errors.Option) error {
+	ol = append(ol, j.C(metadataEventFilterErrCode))
 	return errors.New(metadataEventFilterErrMsg, ol...)
 }

@@ -52,6 +52,14 @@ func TestMakeMetadataEventFilter(t *testing.T) {
 func TestMetadataEventFilter(t *testing.T) {
 	d := "metadata value"
 	m := []byte(d)
+
+	// Define errors once so the same pointer is used in both the closures
+	// and the expected-error slices. jettison's errors.Is uses pointer identity
+	// for errors without a j.C code, so a fresh errors.New in the err slice
+	// would never match.
+	badMetadataErr := errors.New("bad metadata")
+	badFilterErr := errors.New("bad filter")
+
 	type testCase struct {
 		name string
 		e    *reflex.Event
@@ -74,27 +82,27 @@ func TestMetadataEventFilter(t *testing.T) {
 			name: "Deserializer errors",
 			e:    &reflex.Event{MetaData: m},
 			ds: func(x *testing.T) Deserializer[string] {
-				return func(b []byte) (string, error) { require.Equal(x, m, b); return string(b), errors.New("bad metadata") }
+				return func(b []byte) (string, error) { require.Equal(x, m, b); return string(b), badMetadataErr }
 			},
 			flt: func(x *testing.T) DataFilter[string] {
 				return func(s string) (bool, error) { require.Fail(x, "should not be reached"); return true, nil }
 			},
-			err: []error{deserializationErr, errors.New("bad metadata")},
+			err: []error{deserializationErr, badMetadataErr},
 		},
 		{
 			name: "Data Filter errors",
-			e:    &reflex.Event{MetaData: []byte("metadata value")},
+			e:    &reflex.Event{MetaData: m},
 			ds: func(x *testing.T) Deserializer[string] {
 				return func(b []byte) (string, error) { require.Equal(x, m, b); return string(b), nil }
 			},
 			flt: func(x *testing.T) DataFilter[string] {
-				return func(s string) (bool, error) { require.Equal(x, d, s); return true, errors.New("bad filter") }
+				return func(s string) (bool, error) { require.Equal(x, d, s); return true, badFilterErr }
 			},
-			err: []error{errors.New("bad filter")},
+			err: []error{badFilterErr},
 		},
 		{
 			name: "Exclude",
-			e:    &reflex.Event{MetaData: []byte("metadata value")},
+			e:    &reflex.Event{MetaData: m},
 			ds: func(x *testing.T) Deserializer[string] {
 				return func(b []byte) (string, error) { require.Equal(x, m, b); return string(b), nil }
 			},
@@ -104,7 +112,7 @@ func TestMetadataEventFilter(t *testing.T) {
 		},
 		{
 			name: "Include",
-			e:    &reflex.Event{MetaData: []byte("metadata value")},
+			e:    &reflex.Event{MetaData: m},
 			ds: func(x *testing.T) Deserializer[string] {
 				return func(b []byte) (string, error) { require.Equal(x, m, b); return string(b), nil }
 			},
@@ -129,6 +137,7 @@ func TestMetadataEventFilter(t *testing.T) {
 }
 
 func TestIsDeserializationErr(t *testing.T) {
+	const otherErrMsg = "other error"
 	tests := []struct {
 		name string
 		err  error
@@ -139,7 +148,7 @@ func TestIsDeserializationErr(t *testing.T) {
 		},
 		{
 			name: "not deserialization error",
-			err:  errors.New("other error"),
+			err:  errors.New(otherErrMsg),
 		},
 		{
 			name: "direct deserialization error",
@@ -148,18 +157,18 @@ func TestIsDeserializationErr(t *testing.T) {
 		},
 		{
 			name: "indirect deserialization error",
-			err:  errors.Wrap(deserializationErr, "other error"),
+			err:  errors.Wrap(deserializationErr, otherErrMsg),
 			want: true,
 		},
 		{
 			name: "converted deserialization error",
-			err:  asDeserializationErr(errors.New("other error")),
+			err:  asDeserializationErr(errors.New(otherErrMsg)),
 			want: true,
 		},
 		{
 			name: "constructed deserialization error",
 			err:  errors.New(deserializationErrMsg),
-			want: true,
+			want: false,
 		},
 	}
 	for _, tt := range tests {

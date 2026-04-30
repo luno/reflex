@@ -22,7 +22,13 @@ type batchEvent struct {
 
 const minWait = time.Millisecond * 100
 
-var ErrBatchState = errors.New("batch error state", j.C("ERR_b3053f5f1a3ecd23"))
+var (
+	ErrBatchState = errors.New("batch error state", j.C("ERR_b3053f5f1a3ecd23"))
+
+	// ErrInvalidBatchConfig is returned when a BatchConsumer is configured with
+	// both batchPeriod and batchLen set to zero.
+	ErrInvalidBatchConfig = errors.New("batchPeriod or batchLen must be non-zero", j.C("ERR_f4a2c8e7b1d53f90"))
+)
 
 // BatchConsumer provides a reflex consumer that buffers events
 // and flushes a batch to the consume function when either
@@ -95,7 +101,7 @@ func (c *BatchConsumer) Stop() error {
 // enqueue adds the event to the buffer or returns error if batch needs to be reset.
 func (c *BatchConsumer) enqueue(ctx context.Context, e *AckEvent) error {
 	if c.flushPeriod == 0 && c.flushLen == 0 {
-		return errors.New("batchPeriod or batchLen must be non-zero")
+		return ErrInvalidBatchConfig
 	}
 
 	// Add event to batch queue
