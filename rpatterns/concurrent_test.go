@@ -142,7 +142,7 @@ func TestGapIsIgnored(t *testing.T) {
 
 	ctx := context.Background()
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		if i == 70 {
 			continue
 		}

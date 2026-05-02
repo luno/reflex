@@ -229,7 +229,7 @@ func TestBatchError(t *testing.T) {
 		jtest.Assert(t, expErr, err)
 	}()
 
-	for bNo := 0; bNo < 3; bNo++ {
+	for range 3 {
 		b, ok := <-batches
 		if !ok {
 			break

@@ -173,12 +173,12 @@ func TestConcurrentWrites(t *testing.T) {
 
 	writerCount := 100
 	writerReadyGroup.Add(writerCount)
-	for i := 0; i < writerCount; i++ {
+	for range writerCount {
 		writerCompletedGroup.Add(1)
 		go func(writerReadyGroup *sync.WaitGroup, writerCompletedGroup *sync.WaitGroup) {
 			writerReadyGroup.Done()
 			writerReadyGroup.Wait()
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				// Write the thing
 				val := fmt.Sprintf("%v", i)
 				err := store.SetCursor(ctx, "single-key", val)

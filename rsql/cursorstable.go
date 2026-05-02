@@ -18,7 +18,7 @@ import (
 type CursorType int
 
 // Cast returns cursor casted to type.
-func (t CursorType) Cast(cursor string) (interface{}, error) {
+func (t CursorType) Cast(cursor string) (any, error) {
 	if t == cursorTypeString {
 		return cursor, nil
 	}

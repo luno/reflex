@@ -349,8 +349,8 @@ func getNextKey(ctx context.Context, label string, bucket *blob.Bucket, prev str
 
 // makeStartAfter returns a blob.BeforeList function that starts listing after
 // the provided key for improved performance when scanning large buckets.
-func makeStartAfter(key string) func(func(interface{}) bool) error {
-	return func(asFunc func(interface{}) bool) error {
+func makeStartAfter(key string) func(func(any) bool) error {
+	return func(asFunc func(any) bool) error {
 		s3input := new(s3.ListObjectsV2Input)
 		if !asFunc(&s3input) {
 			// We always expect asFunc to return true.
