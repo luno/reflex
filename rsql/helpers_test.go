@@ -46,7 +46,7 @@ func i2s(i int) string {
 }
 
 func assertEqualI2S(t *testing.T, expected int, actual string, msgAndArgs ...any) {
-	assert.Equal(t, i2s(expected), actual, msgAndArgs)
+	assert.Equal(t, i2s(expected), actual, msgAndArgs...)
 }
 
 func waitFor(t *testing.T, d time.Duration, f func() bool) {
