@@ -19,7 +19,7 @@ func TestActivityGauge(t *testing.T) {
 
 	assertMetric := func(ch chan prometheus.Metric) {
 		require.Len(t, ch, 2)
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			m := <-ch
 			dm := new(dto.Metric)
 			err := m.Write(dm)

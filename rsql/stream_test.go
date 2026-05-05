@@ -221,7 +221,7 @@ func TestStreamClientErrors(t *testing.T) {
 	require.Len(t, calls, 3)
 	require.Nil(t, ctx.Err()) // parent context not cancelled
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		res := calls[i]
 		require.Equal(t, i+1, res.Type.ReflexType())
 		require.Equal(t, int64(i+1), res.ForeignIDInt())
@@ -270,12 +270,10 @@ func TestConsumeStreamLag(t *testing.T) {
 		reflex.WithStreamLag(2*time.Second+100*time.Millisecond), // Add 100ms just to be sure.
 	)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := reflex.Run(context.Background(), spec)
 		jtest.Require(t, errDone, err)
-	}()
+	})
 
 	i := 1
 	for ev := range feed {
@@ -423,7 +421,7 @@ func TestStreamMetadata(t *testing.T) {
 	assert.NoError(t, err)
 
 	var results []*reflex.Event
-	for i := 0; i < prefill; i++ {
+	for range prefill {
 		e, err := sc.Recv()
 		assert.NoError(t, err)
 		results = append(results, e)
@@ -438,7 +436,7 @@ func TestStreamMetadata(t *testing.T) {
 		assert.Len(t, e.MetaData, i)
 
 		var meta []byte
-		for l := 0; l < i; l++ {
+		for l := range i {
 			meta = append(meta, byte(l))
 		}
 		assert.EqualValues(t, meta, e.MetaData)
@@ -483,7 +481,7 @@ func TestStreamLag(t *testing.T) {
 
 	// First read all events into the cache.
 	sc1 := s.eTable.Stream(ctx, s.dbc, "")
-	for i := 0; i < total; i++ {
+	for range total {
 		_, err := sc1.Recv()
 		require.NoError(t, err)
 	}
@@ -495,7 +493,7 @@ func TestStreamLag(t *testing.T) {
 	lag := reflex.WithStreamLag(time.Second * (60*5 + 30))
 	sc2 := s.eTable.Stream(ctx, s.dbc, "", lag)
 
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		_, err := sc2.Recv()
 		require.NoError(t, err)
 	}
@@ -561,7 +559,7 @@ func TestStreamLagNoCache(t *testing.T) {
 
 	// First read all 10 events.
 	sc1 := s.eTable.Stream(ctx, s.dbc, "")
-	for i := 0; i < total; i++ {
+	for range total {
 		_, err := sc1.Recv()
 		require.NoError(t, err)
 	}
@@ -573,7 +571,7 @@ func TestStreamLagNoCache(t *testing.T) {
 	lag := reflex.WithStreamLag(time.Second * (60*5 + 30))
 	sc2 := s.eTable.Stream(ctx, s.dbc, "", lag)
 
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		_, err := sc2.Recv()
 		require.NoError(t, err)
 	}

@@ -97,11 +97,9 @@ func (c *ConcurrentConsumer) Reset() error {
 	// Start the new background loop
 	c.inFlight = make(chan int64, c.maxInFlight)
 	c.doneEvents = make(chan eventReturn, c.maxInFlight)
-	c.bgLoop.Add(1)
-	go func() {
+	c.bgLoop.Go(func() {
 		c.updateCursorForever()
-		c.bgLoop.Done()
-	}()
+	})
 	return nil
 }
 
@@ -113,9 +111,7 @@ func (c *ConcurrentConsumer) Consume(ctx context.Context, e *reflex.Event) error
 	}
 
 	c.inFlight <- e.IDInt()
-	c.inFlightWait.Add(1)
-	go func() {
-		defer c.inFlightWait.Done()
+	c.inFlightWait.Go(func() {
 		ret := eventReturn{EventID: e.IDInt()}
 		err := c.consumer.Consume(ctx, e)
 		if err != nil {
@@ -123,7 +119,7 @@ func (c *ConcurrentConsumer) Consume(ctx context.Context, e *reflex.Event) error
 			ret.Err = err
 		}
 		c.doneEvents <- ret
-	}()
+	})
 	return nil
 }
 

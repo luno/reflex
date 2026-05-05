@@ -301,7 +301,7 @@ func TestGetLatestID(t *testing.T) {
 	assert.Equal(t, int64(0), id)
 
 	n := 10
-	for i := 0; i < n; i++ {
+	for range n {
 		err := insertTestEvent(dbc, rsql.NewEventsTable("events"), "strid", testEventType(0))
 		assert.NoError(t, err)
 	}
