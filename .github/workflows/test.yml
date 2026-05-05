@@ -12,14 +12,9 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        mysql: [ 'mysql:8' ]
-        go: [ '1.24', '1' ]
-
     services:
       mysql:
-        image: ${{ matrix.mysql }}
+        image: mysql:8
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: yes
           MYSQL_DATABASE: example
@@ -35,7 +30,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
+          go-version: '1'
         id: go
 
       - name: Lint
