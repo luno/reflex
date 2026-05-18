@@ -43,6 +43,20 @@ func WithDecoder(fn func(io.Reader) (Decoder, error)) Option {
 	}
 }
 
+// WithKeyFilter returns an option to configure a custom filter for selecting
+// the next blob key during listing. The function receives the previous key and
+// the current ListObject candidate; return true to select it as the next key.
+// Defaults to o.Key > prev (lexicographic ordering).
+func WithKeyFilter(fn func(prev string, o *blob.ListObject) bool) Option {
+	return func(b *Bucket) {
+		if fn == nil {
+			b.keyFilter = defaultKeyFilter
+			return
+		}
+		b.keyFilter = fn
+	}
+}
+
 // Option is a functional option that configures a bucket.
 type Option func(*Bucket)
 
@@ -65,6 +79,11 @@ func OpenBucket(ctx context.Context, label, urlstr string,
 	return NewBucket(label, bucket, opts...), nil
 }
 
+// defaultKeyFilter selects the next key using lexicographic ordering.
+func defaultKeyFilter(prev string, o *blob.ListObject) bool {
+	return o.Key > prev
+}
+
 // NewBucket returns a bucket using the provided underlying bucket.
 func NewBucket(label string, bucket *blob.Bucket, opts ...Option) *Bucket {
 	b := &Bucket{
@@ -72,6 +91,7 @@ func NewBucket(label string, bucket *blob.Bucket, opts ...Option) *Bucket {
 		bucket:      bucket,
 		decoderFunc: JSONDecoder,
 		backoff:     time.Minute,
+		keyFilter:   defaultKeyFilter,
 	}
 
 	for _, opt := range opts {
@@ -88,6 +108,7 @@ type Bucket struct {
 	bucket      *blob.Bucket
 	decoderFunc func(io.Reader) (Decoder, error)
 	backoff     time.Duration
+	keyFilter   func(prev string, o *blob.ListObject) bool
 
 	cursor  cursor
 	decoder Decoder
@@ -124,6 +145,7 @@ func (b *Bucket) Stream(ctx context.Context, after string,
 		bucket:      b.bucket,
 		decoderFunc: b.decoderFunc,
 		backoff:     b.backoff,
+		keyFilter:   b.keyFilter,
 		cursor:      cursor,
 	}, nil
 }
@@ -139,6 +161,7 @@ type stream struct {
 	bucket      *blob.Bucket
 	decoderFunc func(io.Reader) (Decoder, error)
 	backoff     time.Duration
+	keyFilter   func(prev string, o *blob.ListObject) bool
 
 	next     []byte
 	cursor   cursor
@@ -273,7 +296,7 @@ func (s *stream) loadNextBlob() error {
 	var key string
 	for {
 		var err error
-		key, err = getNextKey(s.ctx, s.label, s.bucket, s.cursor.Key)
+		key, err = getNextKey(s.ctx, s.label, s.bucket, s.cursor.Key, s.keyFilter)
 		if errors.Is(err, io.EOF) {
 			// No key keys, wait.
 			select {
@@ -328,7 +351,7 @@ func (s *stream) loadNextBlob() error {
 	return nil
 }
 
-func getNextKey(ctx context.Context, label string, bucket *blob.Bucket, prev string) (string, error) {
+func getNextKey(ctx context.Context, label string, bucket *blob.Bucket, prev string, filter func(prev string, o *blob.ListObject) bool) (string, error) {
 	iter := bucket.List(&blob.ListOptions{
 		BeforeList: makeStartAfter(prev),
 	})
@@ -339,7 +362,7 @@ func getNextKey(ctx context.Context, label string, bucket *blob.Bucket, prev str
 			return "", errors.Wrap(err, "list iter")
 		}
 
-		if o.Key > prev {
+		if filter(prev, o) {
 			return o.Key, nil
 		}
 

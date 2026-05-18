@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/luno/jettison/jtest"
 	"github.com/stretchr/testify/require"
+	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 
 	"github.com/luno/reflex/rblob"
@@ -149,6 +151,71 @@ func TestWaitForMore(t *testing.T) {
 	err = json.Unmarshal(e.MetaData, &res)
 	require.NoError(t, err)
 	require.Equal(t, exp, res)
+}
+
+func TestWithKeyFilter(t *testing.T) {
+	workDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T) string
+		filter  func(prev string, o *blob.ListObject) bool
+		wantIDs []int64
+		opts    []rblob.Option
+	}{
+		{
+			name: "key prefix excludes 2019 blobs",
+			setup: func(t *testing.T) string {
+				return path.Join(workDir, "testdata")
+			},
+			filter: func(prev string, o *blob.ListObject) bool {
+				return o.Key > prev && !strings.HasPrefix(o.Key, "2019")
+			},
+			wantIDs: []int64{4, 5, 6, 7},
+		},
+		{
+			name: "mod time excludes old blobs",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				oldFile := path.Join(dir, "file-a")
+				require.NoError(t, os.WriteFile(oldFile, []byte(`{"id":1,"field":"old"}`), 0o644))
+				backdated := time.Now().Add(-2 * time.Hour)
+				require.NoError(t, os.Chtimes(oldFile, backdated, backdated))
+				require.NoError(t, os.WriteFile(path.Join(dir, "file-b"), []byte(`{"id":2,"field":"new"}`), 0o644))
+				return dir
+			},
+			filter: func(prev string, o *blob.ListObject) bool {
+				return o.Key > prev && o.ModTime.After(time.Now().Add(-1*time.Hour))
+			},
+			wantIDs: []int64{2},
+			opts:    []rblob.Option{rblob.WithBackoff(time.Millisecond)},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := tc.setup(t)
+			opts := append([]rblob.Option{rblob.WithKeyFilter(tc.filter)}, tc.opts...)
+			bucket, err := rblob.OpenBucket(context.Background(), "", "file:///"+dir, opts...)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				require.NoError(t, bucket.Close())
+			})
+
+			sc, err := bucket.Stream(context.Background(), "")
+			require.NoError(t, err)
+
+			for _, wantID := range tc.wantIDs {
+				e, err := sc.Recv()
+				jtest.Require(t, nil, err)
+
+				var dto TestDTO
+				require.NoError(t, json.Unmarshal(e.MetaData, &dto))
+				require.Equal(t, wantID, dto.ID)
+			}
+		})
+	}
 }
 
 func TestCancelWait(t *testing.T) {
