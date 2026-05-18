@@ -2,14 +2,18 @@ package rblob
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/luno/jettison/jtest"
 	"github.com/stretchr/testify/require"
+	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 )
 
@@ -81,6 +85,104 @@ func TestCursor(t *testing.T) {
 	clone := append([]string(nil), order...)
 	sort.Strings(order)
 	require.Equal(t, clone, order)
+}
+
+func TestWithKeyFilter(t *testing.T) {
+	workDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		// Option-level: verify nil guard and custom fn wiring against b.keyFilter directly.
+		{
+			name: "nil falls back to default: key greater than prev",
+			run: func(t *testing.T) {
+				b := &Bucket{}
+				WithKeyFilter(nil)(b)
+				require.NotNil(t, b.keyFilter)
+				require.True(t, b.keyFilter("a", &blob.ListObject{Key: "b"}))
+			},
+		},
+		{
+			name: "nil falls back to default: key not greater than prev",
+			run: func(t *testing.T) {
+				b := &Bucket{}
+				WithKeyFilter(nil)(b)
+				require.False(t, b.keyFilter("b", &blob.ListObject{Key: "a"}))
+			},
+		},
+		{
+			name: "custom fn overrides default",
+			run: func(t *testing.T) {
+				b := &Bucket{}
+				WithKeyFilter(func(_ string, _ *blob.ListObject) bool { return false })(b)
+				require.NotNil(t, b.keyFilter)
+				require.False(t, b.keyFilter("a", &blob.ListObject{Key: "b"})) // default would return true
+			},
+		},
+		// Integration: verify the filter is honoured end-to-end through the stream.
+		{
+			name: "key prefix excludes 2019 blobs",
+			run: func(t *testing.T) {
+				bucket, err := OpenBucket(context.Background(), "",
+					"file:///"+path.Join(workDir, "testdata"),
+					WithKeyFilter(func(prev string, o *blob.ListObject) bool {
+						return o.Key > prev && !strings.HasPrefix(o.Key, "2019")
+					}))
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, bucket.Close()) })
+
+				sc, err := bucket.Stream(context.Background(), "")
+				require.NoError(t, err)
+
+				for _, wantID := range []int64{4, 5, 6, 7} {
+					e, err := sc.Recv()
+					jtest.Require(t, nil, err)
+					var got struct {
+						ID int64 `json:"id"`
+					}
+					require.NoError(t, json.Unmarshal(e.MetaData, &got))
+					require.Equal(t, wantID, got.ID)
+				}
+			},
+		},
+		{
+			name: "mod time excludes old blobs",
+			run: func(t *testing.T) {
+				dir := t.TempDir()
+				oldFile := path.Join(dir, "file-a")
+				require.NoError(t, os.WriteFile(oldFile, []byte(`{"id":1,"field":"old"}`), 0o644))
+				backdated := time.Now().Add(-2 * time.Hour)
+				require.NoError(t, os.Chtimes(oldFile, backdated, backdated))
+				require.NoError(t, os.WriteFile(path.Join(dir, "file-b"), []byte(`{"id":2,"field":"new"}`), 0o644))
+
+				bucket, err := OpenBucket(context.Background(), "", "file:///"+dir,
+					WithKeyFilter(func(prev string, o *blob.ListObject) bool {
+						return o.Key > prev && o.ModTime.After(time.Now().Add(-1*time.Hour))
+					}),
+					WithBackoff(time.Millisecond))
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, bucket.Close()) })
+
+				sc, err := bucket.Stream(context.Background(), "")
+				require.NoError(t, err)
+
+				e, err := sc.Recv()
+				jtest.Require(t, nil, err)
+				var got struct {
+					ID int64 `json:"id"`
+				}
+				require.NoError(t, json.Unmarshal(e.MetaData, &got))
+				require.Equal(t, int64(2), got.ID)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) { tc.run(t) })
+	}
 }
 
 func Test_makeStartAfter(t *testing.T) {
