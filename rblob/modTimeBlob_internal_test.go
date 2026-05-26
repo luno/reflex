@@ -49,36 +49,50 @@ func TestModtimeCursor_String(t *testing.T) {
 }
 
 func TestParseModTimeCursor(t *testing.T) {
-	t.Run("empty string returns zero cursor", func(t *testing.T) {
-		c, err := parseModTimeCursor("")
-		jtest.RequireNil(t, err)
-		require.Equal(t, modtimeCursor{}, c)
-	})
+	tests := []struct {
+		name    string
+		input   string
+		want    modtimeCursor
+		wantErr string
+	}{
+		{
+			name:  "empty string returns zero cursor",
+			input: "",
+			want:  modtimeCursor{},
+		},
+		{
+			name:    "when no key is provided",
+			input:   "|borderlineSomethingSomething",
+			wantErr: "empty key",
+		},
+		{
+			name:    "missing separator returns error",
+			input:   "nokeynoseparator",
+			wantErr: "missing separator",
+		},
+		{
+			name:    "non-integer unix-nano returns error",
+			input:   "somekey|notanumber",
+			wantErr: "bad unix-nano",
+		},
+		{
+			name:  "valid cursor parses correctly",
+			input: "path/to/obj|1000000000",
+			want:  modtimeCursor{Key: "path/to/obj", ModTime: time.Unix(0, 1_000_000_000).UTC()},
+		},
+	}
 
-	t.Run("when no key is provided", func(t *testing.T) {
-		_, err := parseModTimeCursor("|borderlineSomethingSomething")
-		require.Error(t, err)
-		require.ErrorContains(t, err, "empty key")
-	})
-
-	t.Run("missing separator returns error", func(t *testing.T) {
-		_, err := parseModTimeCursor("nokeynoseparator")
-		require.Error(t, err)
-		require.ErrorContains(t, err, "missing separator")
-	})
-
-	t.Run("non-integer unix-nano returns error", func(t *testing.T) {
-		_, err := parseModTimeCursor("somekey|notanumber")
-		require.Error(t, err)
-		require.ErrorContains(t, err, "bad unix-nano")
-	})
-
-	t.Run("valid cursor parses correctly", func(t *testing.T) {
-		c, err := parseModTimeCursor("path/to/obj|1000000000")
-		jtest.RequireNil(t, err)
-		require.Equal(t, "path/to/obj", c.Key)
-		require.Equal(t, time.Unix(0, 1_000_000_000).UTC(), c.ModTime)
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := parseModTimeCursor(tc.input)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			jtest.RequireNil(t, err)
+			require.Equal(t, tc.want, c)
+		})
+	}
 }
 
 func TestModtimeCursor_RoundTrip(t *testing.T) {
