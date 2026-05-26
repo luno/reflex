@@ -55,6 +55,12 @@ func TestParseModTimeCursor(t *testing.T) {
 		require.Equal(t, modtimeCursor{}, c)
 	})
 
+	t.Run("when no key is provided", func(t *testing.T) {
+		_, err := parseModTimeCursor("|borderlineSomethingSomething")
+		require.Error(t, err)
+		require.ErrorContains(t, err, "empty key")
+	})
+
 	t.Run("missing separator returns error", func(t *testing.T) {
 		_, err := parseModTimeCursor("nokeynoseparator")
 		require.Error(t, err)

@@ -57,9 +57,14 @@ func parseModTimeCursor(s string) (modtimeCursor, error) {
 		return modtimeCursor{}, nil
 	}
 
-	key, rest, found := strings.Cut(s, "|")
-	if !found {
+	idx := strings.LastIndex(s, "|")
+	if idx < 0 {
 		return modtimeCursor{}, errors.New("invalid modtime cursor: missing separator")
+	}
+	key := s[:idx]
+	rest := s[idx+1:]
+	if key == "" {
+		return modtimeCursor{}, errors.New("invalid modtime cursor: empty key")
 	}
 
 	ns, err := strconv.ParseInt(rest, 10, 64)
