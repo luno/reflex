@@ -53,7 +53,7 @@ func TestParseModTimeCursor(t *testing.T) {
 		name    string
 		input   string
 		want    modtimeCursor
-		wantErr string
+		wantErr error
 	}{
 		{
 			name:  "empty string returns zero cursor",
@@ -63,17 +63,17 @@ func TestParseModTimeCursor(t *testing.T) {
 		{
 			name:    "when no key is provided",
 			input:   "|borderlineSomethingSomething",
-			wantErr: "empty key",
+			wantErr: errModTimeCursorEmptyKey,
 		},
 		{
 			name:    "missing separator returns error",
 			input:   "nokeynoseparator",
-			wantErr: "missing separator",
+			wantErr: errModTimeCursorMissingSeparator,
 		},
 		{
 			name:    "non-integer unix-nano returns error",
 			input:   "somekey|notanumber",
-			wantErr: "bad unix-nano",
+			wantErr: errModTimeCursorBadUnixNano,
 		},
 		{
 			name:  "valid cursor parses correctly",
@@ -85,11 +85,11 @@ func TestParseModTimeCursor(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c, err := parseModTimeCursor(tc.input)
-			if tc.wantErr != "" {
-				require.ErrorContains(t, err, tc.wantErr)
+			if tc.wantErr != nil {
+				jtest.Require(t, tc.wantErr, err)
 				return
 			}
-			jtest.RequireNil(t, err)
+			jtest.Require(t, nil, err)
 			require.Equal(t, tc.want, c)
 		})
 	}

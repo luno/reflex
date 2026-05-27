@@ -11,12 +11,18 @@ import (
 
 // --------------------------------------------------------------------------------------------
 // This differs from the regular blob functionality, in that it is designed to resume
-// its cursor based on the comparisions on last modified rather than on lexicographic
+// its cursor based on the comparisons on last modified rather than on lexicographic
 // ordering. Since this is not supported in the AWS ListObjectsV2 client (https://docs.aws.amazon.com/cli/latest/reference/s3api/list-objects-v2.html)
 // (on the day this is documented 2026-05-26). This should only be used for small to
 // medium size S3 buckets. Reason being that the cursor will need to iterate through all
 // the last modified list objects to determine its resume position.
 // --------------------------------------------------------------------------------------------
+
+var (
+	errModTimeCursorMissingSeparator = errors.New("invalid modtime cursor: missing separator")
+	errModTimeCursorEmptyKey         = errors.New("invalid modtime cursor: empty key")
+	errModTimeCursorBadUnixNano      = errors.New("invalid modtime cursor: bad unix-nano")
+)
 
 // modtimeCursor identifies the last-processed S3 object by its key and
 // last-modified time. ModTime is used for ordering; Key breaks ties and
@@ -59,17 +65,17 @@ func parseModTimeCursor(s string) (modtimeCursor, error) {
 
 	idx := strings.LastIndex(s, "|")
 	if idx < 0 {
-		return modtimeCursor{}, errors.New("invalid modtime cursor: missing separator")
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorMissingSeparator, "")
 	}
 	key := s[:idx]
 	rest := s[idx+1:]
 	if key == "" {
-		return modtimeCursor{}, errors.New("invalid modtime cursor: empty key")
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorEmptyKey, "")
 	}
 
 	ns, err := strconv.ParseInt(rest, 10, 64)
 	if err != nil {
-		return modtimeCursor{}, errors.New("invalid modtime cursor: bad unix-nano")
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadUnixNano, "")
 	}
 
 	return modtimeCursor{
