@@ -1,12 +1,18 @@
 package rblob
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/j"
+	"github.com/luno/reflex"
+	"gocloud.dev/blob"
 )
 
 // --------------------------------------------------------------------------------------------
@@ -24,12 +30,80 @@ var (
 	errModTimeCursorBadUnixNano      = errors.New("invalid modtime cursor: bad unix-nano")
 )
 
+// ModTimeBucketOption is a functional option that configures a ModTimeBucket.
+type ModTimeBucketOption func(*ModTimeBucket)
+
+// WithModTimeBackoff configures the backoff duration between polls when no new
+// objects are found. Defaults to one minute.
+func WithModTimeBackoff(d time.Duration) ModTimeBucketOption {
+	return func(b *ModTimeBucket) {
+		b.backoff = d
+	}
+}
+
+// WithModTimeDecoder configures the decoder used to read object contents.
+// Defaults to JSONDecoder.
+func WithModTimeDecoder(fn func(io.Reader) (Decoder, error)) ModTimeBucketOption {
+	return func(b *ModTimeBucket) {
+		b.decoderFunc = fn
+	}
+}
+
+// WithModTimePrefix restricts listing to objects whose keys start with prefix.
+func WithModTimePrefix(prefix string) ModTimeBucketOption {
+	return func(b *ModTimeBucket) {
+		b.prefix = prefix
+	}
+}
+
+type ModTimeBucket struct {
+	label       string
+	bucket      *blob.Bucket
+	prefix      string
+	decoderFunc func(io.Reader) (Decoder, error)
+	backoff     time.Duration
+}
+
+type modtimeStream struct {
+	ctx         context.Context
+	bucket      *blob.Bucket
+	prefix      string
+	decoderFunc func(io.Reader) (Decoder, error)
+	backoff     time.Duration
+	cursor      modtimeCursor
+
+	// current object being decoded
+	objects []*blob.ListObject // sorted, filtered slice for this poll cycle
+	objIdx  int
+	reader  *blob.Reader
+	decoder Decoder
+	next    []byte // pre-fetched payload (rblob pattern)
+	blobEOF bool
+
+	err error // terminal error; Recv returns this once set
+}
+
 // modtimeCursor identifies the last-processed S3 object by its key and
 // last-modified time. ModTime is used for ordering; Key breaks ties and
 // provides identity for the resume skip.
 type modtimeCursor struct {
 	Key     string
 	ModTime time.Time
+}
+
+func NewModTimeBucket(label string, bucket *blob.Bucket, opts ...ModTimeBucketOption) *ModTimeBucket {
+	b := &ModTimeBucket{
+		label:       label,
+		bucket:      bucket,
+		decoderFunc: JSONDecoder,
+		backoff:     time.Minute,
+	}
+
+	for _, opt := range opts {
+		opt(b)
+	}
+
+	return b
 }
 
 // String returns the string representation of the modtimeCursor.
@@ -46,6 +120,10 @@ func (c modtimeCursor) String() string {
 	}
 	return fmt.Sprintf("%s|%d", c.Key, c.ModTime.UnixNano())
 }
+
+type modtimeEventType struct{}
+
+func (eventType modtimeEventType) ReflexType() int { return 0 }
 
 // parseModTimeCursor parses a modtime cursor string into a modtimeCursor value.
 //
@@ -81,5 +159,171 @@ func parseModTimeCursor(s string) (modtimeCursor, error) {
 	return modtimeCursor{
 		Key:     key,
 		ModTime: time.Unix(0, ns).UTC(),
+	}, nil
+}
+
+// listSorted returns a list S3 objects (filtered by the prefix) in timestamp ascending order
+func (s *modtimeStream) listSorted() ([]*blob.ListObject, error) {
+	var objs []*blob.ListObject
+	iter := s.bucket.List(&blob.ListOptions{Prefix: s.prefix})
+	for {
+		o, err := iter.Next(s.ctx)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, errors.Wrap(err, "list object error", j.KS("prefix", s.prefix))
+		}
+		objs = append(objs, o)
+	}
+	slices.SortFunc(objs, func(a, b *blob.ListObject) int {
+		if c := a.ModTime.UTC().Compare(b.ModTime.UTC()); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Key, b.Key)
+	})
+	return objs, nil
+}
+
+// after returns true when object comes strictly after the current cursor.
+func (s *modtimeStream) after(obj *blob.ListObject) bool {
+	if s.cursor.Key == "" {
+		return true
+	}
+
+	modTime := obj.ModTime.UTC()
+	cursorTime := s.cursor.ModTime
+	if modTime.Equal(cursorTime) {
+		return obj.Key > s.cursor.Key
+	}
+	return modTime.After(cursorTime)
+}
+
+func (s *modtimeStream) loadNextObject() error {
+	for {
+		// Close previous reader if any.
+		if s.reader != nil {
+			if err := s.reader.Close(); err != nil {
+				return err
+			}
+			s.reader = nil
+			s.decoder = nil
+			s.blobEOF = false
+		}
+
+		// Refill sorted list if exhausted.
+		if s.objIdx >= len(s.objects) {
+			objs, err := s.listSorted()
+			if err != nil {
+				return err
+			}
+			// Skip anything at or before the current cursor.
+			start := 0
+			for start < len(objs) && !s.after(objs[start]) {
+				start++
+			}
+			s.objects = objs[start:]
+			s.objIdx = 0
+		}
+
+		if s.objIdx < len(s.objects) {
+			break
+		}
+
+		// Nothing new yet — wait and retry.
+		select {
+		case <-s.ctx.Done():
+			return s.ctx.Err()
+		case <-time.After(s.backoff):
+		}
+	}
+
+	obj := s.objects[s.objIdx]
+	s.objIdx++
+
+	r, err := s.bucket.NewReader(s.ctx, obj.Key, nil)
+	if err != nil {
+		return errors.Wrap(err, "new reader")
+	}
+
+	d, err := s.decoderFunc(r)
+	if err != nil {
+		_ = r.Close()
+		return err
+	}
+
+	first, err := d.Decode()
+	if errors.Is(err, io.EOF) {
+		s.blobEOF = true
+	} else if err != nil {
+		_ = r.Close()
+		return errors.Wrap(err, "decode first")
+	}
+
+	s.reader = r
+	s.decoder = d
+	s.next = first
+	s.cursor = modtimeCursor{Key: obj.Key, ModTime: obj.ModTime.UTC()}
+
+	return nil
+}
+
+func (s *modtimeStream) Recv() (*reflex.Event, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	e, err := s.recv()
+	if err != nil {
+		s.err = err
+		if s.reader != nil {
+			_ = s.reader.Close()
+		}
+	}
+	return e, err
+}
+
+func (s *modtimeStream) recv() (*reflex.Event, error) {
+	// Advance to the next available object if needed.
+	for s.decoder == nil || s.blobEOF {
+		if err := s.loadNextObject(); err != nil {
+			return nil, err
+		}
+	}
+
+	payload := s.next
+	peek, err := s.decoder.Decode()
+	if errors.Is(err, io.EOF) {
+		s.blobEOF = true
+	} else if err != nil {
+		return nil, errors.Wrap(err, "decode")
+	}
+	s.next = peek
+
+	e := &reflex.Event{
+		ID:        s.cursor.String(),
+		Type:      modtimeEventType{},
+		Timestamp: s.cursor.ModTime,
+		MetaData:  payload,
+	}
+	return e, nil
+}
+
+func (modTimeBucket *ModTimeBucket) ModTimeStream(
+	ctx context.Context, after string, opts ...reflex.StreamOption,
+) (reflex.StreamClient, error) {
+	if len(opts) > 0 {
+		return nil, errors.New("options not supported")
+	}
+	cursor, err := parseModTimeCursor(after)
+	if err != nil {
+		return nil, err
+	}
+	return &modtimeStream{
+		ctx:         ctx,
+		bucket:      modTimeBucket.bucket,
+		prefix:      modTimeBucket.prefix,
+		decoderFunc: modTimeBucket.decoderFunc,
+		backoff:     modTimeBucket.backoff,
+		cursor:      cursor,
 	}, nil
 }

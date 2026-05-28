@@ -5,38 +5,39 @@ import (
 	"time"
 
 	"github.com/luno/jettison/jtest"
+	"github.com/luno/reflex/rblob/modTimeBlob"
 	"github.com/stretchr/testify/require"
 )
 
 func TestModtimeCursor_String(t *testing.T) {
 	tests := []struct {
 		name     string
-		cursor   modtimeCursor
+		cursor   modTimeBlob.modtimeCursor
 		expected string
 	}{
 		{
 			name:     "empty key returns empty string",
-			cursor:   modtimeCursor{},
+			cursor:   modTimeBlob.modtimeCursor{},
 			expected: "",
 		},
 		{
 			name:     "empty key with non-zero modtime still returns empty string",
-			cursor:   modtimeCursor{Key: "", ModTime: time.Unix(0, 1234567890)},
+			cursor:   modTimeBlob.modtimeCursor{Key: "", ModTime: time.Unix(0, 1234567890)},
 			expected: "",
 		},
 		{
 			name:     "key with zero modtime",
-			cursor:   modtimeCursor{Key: "some/key", ModTime: time.Time{}},
+			cursor:   modTimeBlob.modtimeCursor{Key: "some/key", ModTime: time.Time{}},
 			expected: "some/key|-6795364578871345152",
 		},
 		{
 			name:     "key with positive unix-nano",
-			cursor:   modtimeCursor{Key: "a/b/c", ModTime: time.Unix(0, 1_000_000_000)},
+			cursor:   modTimeBlob.modtimeCursor{Key: "a/b/c", ModTime: time.Unix(0, 1_000_000_000)},
 			expected: "a/b/c|1000000000",
 		},
 		{
 			name:     "key containing pipe character",
-			cursor:   modtimeCursor{Key: "file|with|pipes", ModTime: time.Unix(0, 42)},
+			cursor:   modTimeBlob.modtimeCursor{Key: "file|with|pipes", ModTime: time.Unix(0, 42)},
 			expected: "file|with|pipes|42",
 		},
 	}
@@ -52,39 +53,39 @@ func TestParseModTimeCursor(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
-		want    modtimeCursor
+		want    modTimeBlob.modtimeCursor
 		wantErr error
 	}{
 		{
 			name:  "empty string returns zero cursor",
 			input: "",
-			want:  modtimeCursor{},
+			want:  modTimeBlob.modtimeCursor{},
 		},
 		{
 			name:    "when no key is provided",
 			input:   "|borderlineSomethingSomething",
-			wantErr: errModTimeCursorEmptyKey,
+			wantErr: modTimeBlob.errModTimeCursorEmptyKey,
 		},
 		{
 			name:    "missing separator returns error",
 			input:   "nokeynoseparator",
-			wantErr: errModTimeCursorMissingSeparator,
+			wantErr: modTimeBlob.errModTimeCursorMissingSeparator,
 		},
 		{
 			name:    "non-integer unix-nano returns error",
 			input:   "somekey|notanumber",
-			wantErr: errModTimeCursorBadUnixNano,
+			wantErr: modTimeBlob.errModTimeCursorBadUnixNano,
 		},
 		{
 			name:  "valid cursor parses correctly",
 			input: "path/to/obj|1000000000",
-			want:  modtimeCursor{Key: "path/to/obj", ModTime: time.Unix(0, 1_000_000_000).UTC()},
+			want:  modTimeBlob.modtimeCursor{Key: "path/to/obj", ModTime: time.Unix(0, 1_000_000_000).UTC()},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c, err := parseModTimeCursor(tc.input)
+			c, err := modTimeBlob.parseModTimeCursor(tc.input)
 			if tc.wantErr != nil {
 				jtest.Require(t, tc.wantErr, err)
 				return
@@ -96,7 +97,7 @@ func TestParseModTimeCursor(t *testing.T) {
 }
 
 func TestModtimeCursor_RoundTrip(t *testing.T) {
-	original := modtimeCursor{
+	original := modTimeBlob.modtimeCursor{
 		Key:     "2024/01/15/event.json",
 		ModTime: time.Unix(1705276800, 123456789).UTC(),
 	}
@@ -104,7 +105,7 @@ func TestModtimeCursor_RoundTrip(t *testing.T) {
 	s := original.String()
 	require.NotEmpty(t, s)
 
-	parsed, err := parseModTimeCursor(s)
+	parsed, err := modTimeBlob.parseModTimeCursor(s)
 	jtest.RequireNil(t, err)
 	require.Equal(t, original, parsed)
 }
