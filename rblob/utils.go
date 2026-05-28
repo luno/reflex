@@ -7,3 +7,6 @@ type Decoder interface {
 	// are available.
 	Decode() ([]byte, error)
 }
+
+// BucketOption is a generic functional option that configures a bucket of type T.
+type BucketOption[T any] func(*T)

@@ -30,12 +30,9 @@ var (
 	errModTimeCursorBadUnixNano      = errors.New("invalid modtime cursor: bad unix-nano")
 )
 
-// ModTimeBucketOption is a functional option that configures a ModTimeBucket.
-type ModTimeBucketOption func(*ModTimeBucket)
-
 // WithModTimeBackoff configures the backoff duration between polls when no new
 // objects are found. Defaults to one minute.
-func WithModTimeBackoff(d time.Duration) ModTimeBucketOption {
+func WithModTimeBackoff(d time.Duration) BucketOption[ModTimeBucket] {
 	return func(b *ModTimeBucket) {
 		b.backoff = d
 	}
@@ -43,14 +40,14 @@ func WithModTimeBackoff(d time.Duration) ModTimeBucketOption {
 
 // WithModTimeDecoder configures the decoder used to read object contents.
 // Defaults to JSONDecoder.
-func WithModTimeDecoder(fn func(io.Reader) (Decoder, error)) ModTimeBucketOption {
+func WithModTimeDecoder(fn func(io.Reader) (Decoder, error)) BucketOption[ModTimeBucket] {
 	return func(b *ModTimeBucket) {
 		b.decoderFunc = fn
 	}
 }
 
 // WithModTimePrefix restricts listing to objects whose keys start with prefix.
-func WithModTimePrefix(prefix string) ModTimeBucketOption {
+func WithModTimePrefix(prefix string) BucketOption[ModTimeBucket] {
 	return func(b *ModTimeBucket) {
 		b.prefix = prefix
 	}
@@ -90,8 +87,32 @@ type modtimeCursor struct {
 	Key     string
 	ModTime time.Time
 }
+type modtimeEventType struct{}
 
-func NewModTimeBucket(label string, bucket *blob.Bucket, opts ...ModTimeBucketOption) *ModTimeBucket {
+func (eventType modtimeEventType) ReflexType() int { return 0 }
+
+// OpenModTimneBucket opens and returns a bucket for the provided URL.
+//
+// label: defines the bucket label used for metrics.
+// URLString: defines the URL of the blob bucket. See the gocloud
+//// URLOpener documentation in driver subpackages for details
+//// on supported URL formats. Also see https://gocloud.dev/concepts/urls/
+//// and https://gocloud.dev/howto/blob/.
+func OpenModTimeBucket(
+	ctx context.Context,
+	label,
+	URLString string,
+	opts ...BucketOption[ModTimeBucket],
+) (*ModTimeBucket, error) {
+	bucket, err := blob.OpenBucket(ctx, URLString)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewModTimeBucket(label, bucket, opts...), nil
+}
+
+func NewModTimeBucket(label string, bucket *blob.Bucket, opts ...BucketOption[ModTimeBucket]) *ModTimeBucket {
 	b := &ModTimeBucket{
 		label:       label,
 		bucket:      bucket,
@@ -105,6 +126,9 @@ func NewModTimeBucket(label string, bucket *blob.Bucket, opts ...ModTimeBucketOp
 
 	return b
 }
+
+// Close releases any resources used by the underlying modTime bucket
+func (bucket *ModTimeBucket) Close() error { return bucket.bucket.Close() }
 
 // String returns the string representation of the modtimeCursor.
 //
@@ -120,10 +144,6 @@ func (c modtimeCursor) String() string {
 	}
 	return fmt.Sprintf("%s|%d", c.Key, c.ModTime.UnixNano())
 }
-
-type modtimeEventType struct{}
-
-func (eventType modtimeEventType) ReflexType() int { return 0 }
 
 // parseModTimeCursor parses a modtime cursor string into a modtimeCursor value.
 //
@@ -326,4 +346,22 @@ func (modTimeBucket *ModTimeBucket) ModTimeStream(
 		backoff:     modTimeBucket.backoff,
 		cursor:      cursor,
 	}, nil
+}
+
+// Close closes the modtime stream and its reader.
+func (s *modtimeStream) Close() error {
+	// Check if stream already closed
+	if s.err != nil {
+		return s.err
+	}
+
+	// Set err to be closed
+	s.err = errors.New("closed")
+
+	// Check if stream reader is closed
+	if s.reader == nil {
+		return nil
+	}
+
+	return s.reader.Close()
 }
