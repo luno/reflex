@@ -70,14 +70,14 @@ type modtimeStream struct {
 	cursor      modtimeCursor
 
 	// current object being decoded
-	objects []*blob.ListObject // sorted, filtered slice for this poll cycle
+	objects []*blob.ListObject
 	objIdx  int
 	reader  *blob.Reader
 	decoder Decoder
-	next    []byte // pre-fetched payload (rblob pattern)
+	next    []byte
 	blobEOF bool
 
-	err error // terminal error; Recv returns this once set
+	err error
 }
 
 // modtimeCursor identifies the last-processed S3 object by its key and
@@ -219,6 +219,10 @@ func (s *modtimeStream) after(obj *blob.ListObject) bool {
 	return modTime.After(cursorTime)
 }
 
+// loadNextObject advances to the next blob object in sorted order, opening its
+// reader and pre-loading the first event. If the sorted object list is
+// exhausted it re-lists and waits (with backoff) until a new object appears or
+// the context is canceled.
 func (s *modtimeStream) loadNextObject() error {
 	for {
 		// Close previous reader if any.
@@ -328,6 +332,11 @@ func (s *modtimeStream) recv() (*reflex.Event, error) {
 	return e, nil
 }
 
+// ModTimeStream returns a reflex.StreamClient that streams events from the
+// bucket in modification-time order. The after parameter is an opaque cursor
+// string (as returned by previous events) that resumes streaming from where
+// the caller left off; pass an empty string to start from the beginning.
+// Stream options are not currently supported and will return an error if provided.
 func (b *ModTimeBucket) ModTimeStream(
 	ctx context.Context, after string, opts ...reflex.StreamOption,
 ) (reflex.StreamClient, error) {
