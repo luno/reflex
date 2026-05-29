@@ -108,7 +108,7 @@ func TestModTimeStream_WithPrefix(t *testing.T) {
 	writeModTimeBlob(t, dir, filepath.Join("prefix", "b-obj"), []byte(`{"id":2}`), t2)
 
 	mb := openModTimeBucket(t, dir,
-		rblob.WithModTimePrefix("prefix."),
+		rblob.WithModTimePrefix("prefix/"),
 		rblob.WithModTimeBackoff(time.Millisecond),
 	)
 
