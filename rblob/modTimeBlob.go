@@ -124,6 +124,13 @@ func NewModTimeBucket(label string, bucket *blob.Bucket, opts ...BucketOption[Mo
 		opt(b)
 	}
 
+	if b.decoderFunc == nil {
+		b.decoderFunc = JSONDecoder
+	}
+	if b.backoff <= 0 {
+		b.backoff = time.Minute
+	}
+
 	return b
 }
 

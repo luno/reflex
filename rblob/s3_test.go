@@ -20,7 +20,7 @@ var (
 
 	modTimeS3URL    = flag.String("test_modtime_s3_url", "", "Define to enable modtime s3 integration test")
 	modTimeS3After  = flag.String("test_modtime_s3_after", "", "Modtime cursor to resume streaming from")
-	modTimeS3Prefix = flag.String("test_modtime_s3_prefix", "prefix", "Optional key prefix filter for modtime s3 test")
+	modTimeS3Prefix = flag.String("test_modtime_s3_prefix", "", "Optional key prefix filter for modtime s3 test")
 	modTimeS3Date   = flag.String("test_modtime_s3_date", "", "Date in YYYYMMDD format for date-prefix subtest (defaults to today UTC)")
 )
 
