@@ -91,13 +91,13 @@ type modtimeEventType struct{}
 
 func (eventType modtimeEventType) ReflexType() int { return 0 }
 
-// OpenModTimneBucket opens and returns a bucket for the provided URL.
+// OpenModTimeBucket opens and returns a bucket for the provided URL.
 //
 // label: defines the bucket label used for metrics.
 // URLString: defines the URL of the blob bucket. See the gocloud
-//// URLOpener documentation in driver subpackages for details
-//// on supported URL formats. Also see https://gocloud.dev/concepts/urls/
-//// and https://gocloud.dev/howto/blob/.
+// URLOpener documentation in driver subpackages for details
+// on supported URL formats. Also see https://gocloud.dev/concepts/urls/
+// and https://gocloud.dev/howto/blob/.
 func OpenModTimeBucket(
 	ctx context.Context,
 	label,
@@ -128,7 +128,7 @@ func NewModTimeBucket(label string, bucket *blob.Bucket, opts ...BucketOption[Mo
 }
 
 // Close releases any resources used by the underlying modTime bucket
-func (bucket *ModTimeBucket) Close() error { return bucket.bucket.Close() }
+func (b *ModTimeBucket) Close() error { return b.bucket.Close() }
 
 // String returns the string representation of the modtimeCursor.
 //
@@ -328,7 +328,7 @@ func (s *modtimeStream) recv() (*reflex.Event, error) {
 	return e, nil
 }
 
-func (modTimeBucket *ModTimeBucket) ModTimeStream(
+func (b *ModTimeBucket) ModTimeStream(
 	ctx context.Context, after string, opts ...reflex.StreamOption,
 ) (reflex.StreamClient, error) {
 	if len(opts) > 0 {
@@ -340,10 +340,10 @@ func (modTimeBucket *ModTimeBucket) ModTimeStream(
 	}
 	return &modtimeStream{
 		ctx:         ctx,
-		bucket:      modTimeBucket.bucket,
-		prefix:      modTimeBucket.prefix,
-		decoderFunc: modTimeBucket.decoderFunc,
-		backoff:     modTimeBucket.backoff,
+		bucket:      b.bucket,
+		prefix:      b.prefix,
+		decoderFunc: b.decoderFunc,
+		backoff:     b.backoff,
 		cursor:      cursor,
 	}, nil
 }
