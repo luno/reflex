@@ -28,6 +28,7 @@ var (
 	errModTimeCursorMissingSeparator = errors.New("invalid modtime cursor: missing separator")
 	errModTimeCursorEmptyKey         = errors.New("invalid modtime cursor: empty key")
 	errModTimeCursorBadUnixNano      = errors.New("invalid modtime cursor: bad unix-nano")
+	errModTimeCursorBadOffset        = errors.New("invalid modtime cursor: bad offset")
 )
 
 // WithModTimeBackoff configures the backoff duration between polls when no new
@@ -70,22 +71,25 @@ type modtimeStream struct {
 	cursor      modtimeCursor
 
 	// current object being decoded
-	objects []*blob.ListObject
-	objIdx  int
-	reader  *blob.Reader
-	decoder Decoder
-	next    []byte
-	blobEOF bool
+	objects    []*blob.ListObject
+	objIdx     int
+	reader     *blob.Reader
+	decoder    Decoder
+	next       []byte
+	blobEOF    bool
+	resumeDone bool // true once the initial cursor blob has been opened for mid-blob resume
 
 	err error
 }
 
 // modtimeCursor identifies the last-processed S3 object by its key and
 // last-modified time. ModTime is used for ordering; Key breaks ties and
-// provides identity for the resume skip.
+// provides identity for the resume skip. Offset is the number of records
+// already consumed from this blob, used to resume mid-blob.
 type modtimeCursor struct {
 	Key     string
 	ModTime time.Time
+	Offset  int
 }
 type modtimeEventType struct{}
 
@@ -142,50 +146,66 @@ func (b *ModTimeBucket) Close() error { return b.bucket.Close() }
 // If the cursor key is empty, an empty string is returned.
 // Otherwise, the result is formatted as:
 //
-//	<key>|<modtime_unix_nano>
+//	<key>|<modtime_unix_nano>|<offset>
 //
-// where modtime_unix_nano is the modification time in Unix nanoseconds.
+// where modtime_unix_nano is the modification time in Unix nanoseconds and
+// offset is the number of records already consumed from this blob.
 func (c modtimeCursor) String() string {
 	if c.Key == "" {
 		return ""
 	}
-	return fmt.Sprintf("%s|%d", c.Key, c.ModTime.UnixNano())
+	return fmt.Sprintf("%s|%d|%d", c.Key, c.ModTime.UnixNano(), c.Offset)
 }
 
 // parseModTimeCursor parses a modtime cursor string into a modtimeCursor value.
 //
 // The expected format is:
 //
-//	<key>|<modtime_unix_nano>
+//	<key>|<modtime_unix_nano>|<offset>
 //
-// where modtime_unix_nano is a Unix timestamp in nanoseconds.
+// where modtime_unix_nano is a Unix timestamp in nanoseconds and offset is the
+// number of records already consumed from this blob.
+//
+// The legacy two-part format <key>|<modtime_unix_nano> is also accepted and
+// returns a cursor with Offset 0.
 //
 // An empty string returns an empty modtimeCursor and no error.
-// An error is returned if the cursor format is invalid or the timestamp
-// cannot be parsed.
+// An error is returned if the cursor format is invalid or fields cannot be parsed.
 func parseModTimeCursor(s string) (modtimeCursor, error) {
 	if s == "" {
 		return modtimeCursor{}, nil
 	}
 
-	idx := strings.LastIndex(s, "|")
-	if idx < 0 {
+	lastSep := strings.LastIndex(s, "|")
+	if lastSep < 0 {
 		return modtimeCursor{}, errors.Wrap(errModTimeCursorMissingSeparator, "")
 	}
-	key := s[:idx]
-	rest := s[idx+1:]
+
+	tail := s[lastSep+1:]
+	prefix := s[:lastSep]
+
+	secondSep := strings.LastIndex(prefix, "|")
+	if secondSep < 0 {
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorMissingSeparator, "")
+	}
+
+	key := prefix[:secondSep]
+	nanoStr := prefix[secondSep+1:]
 	if key == "" {
 		return modtimeCursor{}, errors.Wrap(errModTimeCursorEmptyKey, "")
 	}
-
-	ns, err := strconv.ParseInt(rest, 10, 64)
+	ns, err := strconv.ParseInt(nanoStr, 10, 64)
 	if err != nil {
 		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadUnixNano, "")
 	}
-
+	offset, err := strconv.ParseInt(tail, 10, 64)
+	if err != nil {
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadOffset, "")
+	}
 	return modtimeCursor{
 		Key:     key,
 		ModTime: time.Unix(0, ns).UTC(),
+		Offset:  int(offset),
 	}, nil
 }
 
@@ -226,6 +246,11 @@ func (s *modtimeStream) after(obj *blob.ListObject) bool {
 	return modTime.After(cursorTime)
 }
 
+// isCursorBlob returns true when obj is the same blob the cursor points to.
+func (s *modtimeStream) isCursorBlob(obj *blob.ListObject) bool {
+	return obj.Key == s.cursor.Key && obj.ModTime.UTC().Equal(s.cursor.ModTime)
+}
+
 // loadNextObject advances to the next blob object in sorted order, opening its
 // reader and pre-loading the first event. If the sorted object list is
 // exhausted it re-lists and waits (with backoff) until a new object appears or
@@ -248,9 +273,13 @@ func (s *modtimeStream) loadNextObject() error {
 			if err != nil {
 				return err
 			}
-			// Skip anything at or before the current cursor.
+			// Skip anything at or before the current cursor, but retain the
+			// cursor blob itself when resuming mid-blob.
 			start := 0
 			for start < len(objs) && !s.after(objs[start]) {
+				if !s.resumeDone && s.cursor.Offset > 0 && s.isCursorBlob(objs[start]) {
+					break
+				}
 				start++
 			}
 			s.objects = objs[start:]
@@ -283,6 +312,25 @@ func (s *modtimeStream) loadNextObject() error {
 		return err
 	}
 
+	isCursor := !s.resumeDone && s.cursor.Offset > 0 && s.isCursorBlob(obj)
+	if isCursor {
+		s.resumeDone = true
+		for i := 0; i < s.cursor.Offset; i++ {
+			if _, skipErr := d.Decode(); errors.Is(skipErr, io.EOF) {
+				// Offset exceeds the blob's record count — treat as fully consumed.
+				s.reader = r
+				s.decoder = d
+				s.blobEOF = true
+				return nil
+			} else if skipErr != nil {
+				_ = r.Close()
+				return errors.Wrap(skipErr, "skip record")
+			}
+		}
+	} else {
+		s.cursor = modtimeCursor{Key: obj.Key, ModTime: obj.ModTime.UTC()}
+	}
+
 	first, err := d.Decode()
 	if errors.Is(err, io.EOF) {
 		s.blobEOF = true
@@ -294,7 +342,6 @@ func (s *modtimeStream) loadNextObject() error {
 	s.reader = r
 	s.decoder = d
 	s.next = first
-	s.cursor = modtimeCursor{Key: obj.Key, ModTime: obj.ModTime.UTC()}
 
 	return nil
 }
@@ -329,6 +376,7 @@ func (s *modtimeStream) recv() (*reflex.Event, error) {
 		return nil, errors.Wrap(err, "decode")
 	}
 	s.next = peek
+	s.cursor.Offset++
 
 	e := &reflex.Event{
 		ID:        s.cursor.String(),

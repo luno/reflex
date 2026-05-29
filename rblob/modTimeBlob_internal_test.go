@@ -33,17 +33,22 @@ func TestModtimeCursor_String(t *testing.T) {
 		{
 			name:     "key with zero modtime",
 			cursor:   modtimeCursor{Key: "some/key", ModTime: time.Time{}},
-			expected: "some/key|-6795364578871345152",
+			expected: "some/key|-6795364578871345152|0",
 		},
 		{
 			name:     "key with positive unix-nano",
 			cursor:   modtimeCursor{Key: "a/b/c", ModTime: time.Unix(0, 1_000_000_000)},
-			expected: "a/b/c|1000000000",
+			expected: "a/b/c|1000000000|0",
 		},
 		{
 			name:     "key containing pipe character",
 			cursor:   modtimeCursor{Key: "file|with|pipes", ModTime: time.Unix(0, 42)},
-			expected: "file|with|pipes|42",
+			expected: "file|with|pipes|42|0",
+		},
+		{
+			name:     "non-zero offset is encoded",
+			cursor:   modtimeCursor{Key: "a/b/c", ModTime: time.Unix(0, 1_000_000_000), Offset: 3},
+			expected: "a/b/c|1000000000|3",
 		},
 	}
 
@@ -67,24 +72,34 @@ func TestParseModTimeCursor(t *testing.T) {
 			want:  modtimeCursor{},
 		},
 		{
-			name:    "when no key is provided",
-			input:   "|borderlineSomethingSomething",
-			wantErr: errModTimeCursorEmptyKey,
-		},
-		{
 			name:    "missing separator returns error",
 			input:   "nokeynoseparator",
 			wantErr: errModTimeCursorMissingSeparator,
 		},
 		{
+			name:    "only one separator returns error",
+			input:   "somekey|1000000000",
+			wantErr: errModTimeCursorMissingSeparator,
+		},
+		{
+			name:    "empty key returns error",
+			input:   "|1000000000|0",
+			wantErr: errModTimeCursorEmptyKey,
+		},
+		{
 			name:    "non-integer unix-nano returns error",
-			input:   "somekey|notanumber",
+			input:   "somekey|notanumber|0",
 			wantErr: errModTimeCursorBadUnixNano,
 		},
 		{
 			name:  "valid cursor parses correctly",
-			input: "path/to/obj|1000000000",
-			want:  modtimeCursor{Key: "path/to/obj", ModTime: time.Unix(0, 1_000_000_000).UTC()},
+			input: "path/to/obj|1000000000|5",
+			want:  modtimeCursor{Key: "path/to/obj", ModTime: time.Unix(0, 1_000_000_000).UTC(), Offset: 5},
+		},
+		{
+			name:    "non-integer offset returns error",
+			input:   "path/to/obj|1000000000|notanoffset",
+			wantErr: errModTimeCursorBadOffset,
 		},
 	}
 

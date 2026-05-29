@@ -176,7 +176,39 @@ func TestModTimeStream_MultipleEventsPerFile(t *testing.T) {
 	}
 
 	require.Equal(t, []int64{1, 2, 3}, ids)
-	// All records in the same file share the same cursor (the file's key + modtime).
-	require.Equal(t, cursorIDs[0], cursorIDs[1])
-	require.Equal(t, cursorIDs[0], cursorIDs[2])
+	// Each record in the same file gets a unique cursor with an incrementing offset.
+	require.NotEqual(t, cursorIDs[0], cursorIDs[1])
+	require.NotEqual(t, cursorIDs[1], cursorIDs[2])
+}
+
+func TestModTimeStream_ResumeFromMiddleOfBlob(t *testing.T) {
+	dir := t.TempDir()
+
+	t1 := time.Unix(1000, 0).UTC()
+	writeModTimeBlob(t, dir, "multi", []byte(`{"id":1}{"id":2}{"id":3}`), t1)
+
+	mb := openModTimeBucket(t, dir, rblob.WithModTimeBackoff(time.Millisecond))
+
+	sc, err := mb.ModTimeStream(context.Background(), "")
+	require.NoError(t, err)
+
+	first, err := sc.Recv()
+	jtest.Require(t, nil, err)
+	var got struct {
+		ID int64 `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(first.MetaData, &got))
+	require.Equal(t, int64(1), got.ID)
+
+	// Resume after the first record — should yield records 2 and 3 only.
+	sc2, err := mb.ModTimeStream(context.Background(), first.ID)
+	require.NoError(t, err)
+
+	for _, wantID := range []int64{2, 3} {
+		e, err := sc2.Recv()
+		jtest.Require(t, nil, err)
+
+		require.NoError(t, json.Unmarshal(e.MetaData, &got))
+		require.Equal(t, wantID, got.ID)
+	}
 }
