@@ -63,7 +63,7 @@ type ModTimeBucket struct {
 }
 
 type modtimeStream struct {
-	ctx         context.Context
+	ctx         context.Context //nolint:containedctx // context governs stream lifetime; Recv() has no ctx param
 	bucket      *blob.Bucket
 	prefix      string
 	decoderFunc func(io.Reader) (Decoder, error)
