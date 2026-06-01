@@ -1,7 +1,6 @@
 package rblob
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -186,7 +185,7 @@ func TestModtimeStream_ListSorted(t *testing.T) {
 
 	openBucket := func(t *testing.T, dir string) *blob.Bucket {
 		t.Helper()
-		b, err := blob.OpenBucket(context.Background(), "file:///"+dir)
+		b, err := blob.OpenBucket(t.Context(), "file:///"+dir)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, b.Close()) })
 		return b
@@ -200,7 +199,7 @@ func TestModtimeStream_ListSorted(t *testing.T) {
 		writeFile(t, dir, "b-file", t2) // same modtime as c-file, but key sorts first
 		writeFile(t, dir, "d-file", t3) // latest
 
-		s := &modtimeStream{ctx: context.Background(), bucket: openBucket(t, dir)}
+		s := &modtimeStream{ctx: t.Context(), bucket: openBucket(t, dir)}
 		objs, err := s.listSorted()
 		require.NoError(t, err)
 		require.Len(t, objs, 4)
@@ -214,18 +213,18 @@ func TestModtimeStream_ListSorted(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, dir, "other-obj", t1)
 
-		s := &modtimeStream{ctx: context.Background(), bucket: openBucket(t, dir), prefix: "nomatch/"}
+		s := &modtimeStream{ctx: t.Context(), bucket: openBucket(t, dir), prefix: "nomatch/"}
 		objs, err := s.listSorted()
 		require.NoError(t, err)
 		require.Empty(t, objs)
 	})
 
 	t.Run("closed bucket returns error", func(t *testing.T) {
-		b, err := blob.OpenBucket(context.Background(), "file:///"+t.TempDir())
+		b, err := blob.OpenBucket(t.Context(), "file:///"+t.TempDir())
 		require.NoError(t, err)
 		require.NoError(t, b.Close())
 
-		s := &modtimeStream{ctx: context.Background(), bucket: b}
+		s := &modtimeStream{ctx: t.Context(), bucket: b}
 		_, err = s.listSorted()
 		require.Error(t, err)
 	})
@@ -271,12 +270,12 @@ func TestModtimeStream_Close(t *testing.T) {
 		require.NoError(t, os.WriteFile(p, []byte(`{}`), 0o644))
 		require.NoError(t, os.Chtimes(p, t1, t1))
 
-		b, err := blob.OpenBucket(context.Background(), "file:///"+dir)
+		b, err := blob.OpenBucket(t.Context(), "file:///"+dir)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, b.Close()) })
 
 		s := &modtimeStream{
-			ctx:         context.Background(),
+			ctx:         t.Context(),
 			bucket:      b,
 			decoderFunc: JSONDecoder,
 			backoff:     time.Millisecond,
@@ -287,7 +286,7 @@ func TestModtimeStream_Close(t *testing.T) {
 	})
 
 	t.Run("recv after close returns error", func(t *testing.T) {
-		s := &modtimeStream{ctx: context.Background()}
+		s := &modtimeStream{ctx: t.Context()}
 		require.NoError(t, s.Close())
 		_, err := s.Recv()
 		require.Error(t, err)

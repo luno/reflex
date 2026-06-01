@@ -26,7 +26,7 @@ func writeModTimeBlob(t *testing.T, dir, name string, content []byte, modTime ti
 
 func openModTimeBucket(t *testing.T, dir string, opts ...rblob.BucketOption[rblob.ModTimeBucket]) *rblob.ModTimeBucket {
 	t.Helper()
-	b, err := blob.OpenBucket(context.Background(), "file:///"+dir)
+	b, err := blob.OpenBucket(t.Context(), "file:///"+dir)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, b.Close()) })
 	return rblob.NewModTimeBucket("test", b, opts...)
@@ -45,7 +45,7 @@ func TestModTimeStream_StreamsInModTimeOrder(t *testing.T) {
 	writeModTimeBlob(t, dir, "b-obj", []byte(`{"id":2}`), t2)
 
 	mb := openModTimeBucket(t, dir, rblob.WithModTimeBackoff(time.Millisecond))
-	sc, err := mb.ModTimeStream(context.Background(), "")
+	sc, err := mb.ModTimeStream(t.Context(), "")
 	require.NoError(t, err)
 
 	for _, wantID := range []int64{1, 2, 3} {
@@ -74,7 +74,7 @@ func TestModTimeStream_Resume(t *testing.T) {
 	mb := openModTimeBucket(t, dir, rblob.WithModTimeBackoff(time.Millisecond))
 
 	// Stream the first event and capture its cursor.
-	sc, err := mb.ModTimeStream(context.Background(), "")
+	sc, err := mb.ModTimeStream(t.Context(), "")
 	require.NoError(t, err)
 
 	first, err := sc.Recv()
@@ -82,7 +82,7 @@ func TestModTimeStream_Resume(t *testing.T) {
 	afterCursor := first.ID
 
 	// A fresh stream resuming after the first event should only yield b-obj and c-obj.
-	sc2, err := mb.ModTimeStream(context.Background(), afterCursor)
+	sc2, err := mb.ModTimeStream(t.Context(), afterCursor)
 	require.NoError(t, err)
 
 	for _, wantID := range []int64{2, 3} {
@@ -112,7 +112,7 @@ func TestModTimeStream_WithPrefix(t *testing.T) {
 		rblob.WithModTimeBackoff(time.Millisecond),
 	)
 
-	sc, err := mb.ModTimeStream(context.Background(), "")
+	sc, err := mb.ModTimeStream(t.Context(), "")
 	require.NoError(t, err)
 
 	for _, wantID := range []int64{1, 2} {
@@ -132,7 +132,7 @@ func TestModTimeStream_ContextCancel(t *testing.T) {
 
 	mb := openModTimeBucket(t, dir, rblob.WithModTimeBackoff(time.Hour))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
 
 	sc, err := mb.ModTimeStream(ctx, "")
@@ -144,7 +144,7 @@ func TestModTimeStream_ContextCancel(t *testing.T) {
 
 func TestModTimeBucket_Close(t *testing.T) {
 	dir := t.TempDir()
-	b, err := blob.OpenBucket(context.Background(), "file:///"+dir)
+	b, err := blob.OpenBucket(t.Context(), "file:///"+dir)
 	require.NoError(t, err)
 
 	mb := rblob.NewModTimeBucket("test", b)
@@ -158,7 +158,7 @@ func TestModTimeStream_MultipleEventsPerFile(t *testing.T) {
 	writeModTimeBlob(t, dir, "multi", []byte(`{"id":1}{"id":2}{"id":3}`), t1)
 
 	mb := openModTimeBucket(t, dir, rblob.WithModTimeBackoff(time.Millisecond))
-	sc, err := mb.ModTimeStream(context.Background(), "")
+	sc, err := mb.ModTimeStream(t.Context(), "")
 	require.NoError(t, err)
 
 	var ids []int64
@@ -189,7 +189,7 @@ func TestModTimeStream_ResumeFromMiddleOfBlob(t *testing.T) {
 
 	mb := openModTimeBucket(t, dir, rblob.WithModTimeBackoff(time.Millisecond))
 
-	sc, err := mb.ModTimeStream(context.Background(), "")
+	sc, err := mb.ModTimeStream(t.Context(), "")
 	require.NoError(t, err)
 
 	first, err := sc.Recv()
@@ -201,7 +201,7 @@ func TestModTimeStream_ResumeFromMiddleOfBlob(t *testing.T) {
 	require.Equal(t, int64(1), got.ID)
 
 	// Resume after the first record — should yield records 2 and 3 only.
-	sc2, err := mb.ModTimeStream(context.Background(), first.ID)
+	sc2, err := mb.ModTimeStream(t.Context(), first.ID)
 	require.NoError(t, err)
 
 	for _, wantID := range []int64{2, 3} {
