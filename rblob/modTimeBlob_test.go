@@ -3,6 +3,7 @@ package rblob_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 
+	"github.com/luno/reflex"
 	"github.com/luno/reflex/rblob"
 )
 
@@ -211,4 +213,54 @@ func TestModTimeStream_ResumeFromMiddleOfBlob(t *testing.T) {
 		require.NoError(t, json.Unmarshal(e.MetaData, &got))
 		require.Equal(t, wantID, got.ID)
 	}
+}
+
+func TestOpenModTimeBucket_FileURL(t *testing.T) {
+	dir := t.TempDir()
+	mb, err := rblob.OpenModTimeBucket(t.Context(), "test", "file:///"+dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, mb.Close()) })
+	require.NotNil(t, mb)
+}
+
+func TestOpenModTimeBucket_InvalidURLReturnsError(t *testing.T) {
+	_, err := rblob.OpenModTimeBucket(t.Context(), "test", "invalid-scheme://bucket")
+	require.Error(t, err)
+}
+
+func TestModTimeStream_OptionsNotSupported(t *testing.T) {
+	dir := t.TempDir()
+	mb := openModTimeBucket(t, dir)
+	_, err := mb.ModTimeStream(t.Context(), "", reflex.WithStreamToHead())
+	require.Error(t, err)
+}
+
+func TestModTimeStream_InvalidCursorReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	mb := openModTimeBucket(t, dir)
+	_, err := mb.ModTimeStream(t.Context(), "no-separator-here")
+	require.Error(t, err)
+}
+
+func TestWithModTimeDecoder_CustomDecoder(t *testing.T) {
+	dir := t.TempDir()
+	t1 := time.Unix(1000, 0).UTC()
+	writeModTimeBlob(t, dir, "obj", []byte(`{"id":1}`), t1)
+
+	called := false
+	customDecoder := func(r io.Reader) (rblob.Decoder, error) {
+		called = true
+		return rblob.JSONDecoder(r)
+	}
+
+	mb := openModTimeBucket(t, dir,
+		rblob.WithModTimeDecoder(customDecoder),
+		rblob.WithModTimeBackoff(time.Millisecond),
+	)
+	sc, err := mb.ModTimeStream(t.Context(), "")
+	require.NoError(t, err)
+
+	_, err = sc.Recv()
+	jtest.Require(t, nil, err)
+	require.True(t, called)
 }

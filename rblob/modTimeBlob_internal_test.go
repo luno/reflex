@@ -1,6 +1,7 @@
 package rblob
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,11 @@ import (
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 )
+
+// errDecoder is a Decoder that always returns a fixed error.
+type errDecoder struct{ err error }
+
+func (d *errDecoder) Decode() ([]byte, error) { return nil, d.err }
 
 func TestModtimeCursor_String(t *testing.T) {
 	tests := []struct {
@@ -291,4 +297,171 @@ func TestModtimeStream_Close(t *testing.T) {
 		_, err := s.Recv()
 		require.Error(t, err)
 	})
+}
+
+func TestModtimeEventType_ReflexType(t *testing.T) {
+	require.Equal(t, 0, modtimeEventType{}.ReflexType())
+}
+
+func TestNewModTimeBucket_Fallbacks(t *testing.T) {
+	b, err := blob.OpenBucket(t.Context(), "file:///"+t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, b.Close()) })
+
+	mb := NewModTimeBucket("test", b, WithModTimeDecoder(nil), WithModTimeBackoff(-1))
+	require.NotNil(t, mb.decoderFunc)
+	require.Equal(t, time.Minute, mb.backoff)
+}
+
+func TestModtimeStream_LoadNextObject_ListSortedError(t *testing.T) {
+	b, err := blob.OpenBucket(t.Context(), "file:///"+t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, b.Close())
+
+	s := &modtimeStream{
+		ctx:         t.Context(),
+		bucket:      b,
+		decoderFunc: JSONDecoder,
+		backoff:     time.Millisecond,
+	}
+	require.Error(t, s.loadNextObject())
+}
+
+func TestModtimeStream_LoadNextObject_NewReaderError(t *testing.T) {
+	b, err := blob.OpenBucket(t.Context(), "file:///"+t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, b.Close()) })
+
+	s := &modtimeStream{
+		ctx:         t.Context(),
+		bucket:      b,
+		decoderFunc: JSONDecoder,
+		backoff:     time.Millisecond,
+		objects:     []*blob.ListObject{{Key: "nonexistent", ModTime: time.Unix(1000, 0).UTC()}},
+	}
+	require.Error(t, s.loadNextObject())
+}
+
+func TestModtimeStream_LoadNextObject_DecoderFuncError(t *testing.T) {
+	dir := t.TempDir()
+	t1 := time.Unix(1000, 0).UTC()
+	p := filepath.Join(dir, "obj")
+	require.NoError(t, os.WriteFile(p, []byte(`{}`), 0o644))
+	require.NoError(t, os.Chtimes(p, t1, t1))
+
+	b, err := blob.OpenBucket(t.Context(), "file:///"+dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, b.Close()) })
+
+	decoderErr := errors.New("decoder failed")
+	s := &modtimeStream{
+		ctx:    t.Context(),
+		bucket: b,
+		decoderFunc: func(r io.Reader) (Decoder, error) {
+			return nil, decoderErr
+		},
+		backoff: time.Millisecond,
+	}
+	jtest.Require(t, decoderErr, s.loadNextObject())
+}
+
+func TestModtimeStream_LoadNextObject_DecodeFirstError(t *testing.T) {
+	dir := t.TempDir()
+	t1 := time.Unix(1000, 0).UTC()
+	p := filepath.Join(dir, "obj")
+	require.NoError(t, os.WriteFile(p, []byte(`not-valid-json`), 0o644))
+	require.NoError(t, os.Chtimes(p, t1, t1))
+
+	b, err := blob.OpenBucket(t.Context(), "file:///"+dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, b.Close()) })
+
+	s := &modtimeStream{
+		ctx:         t.Context(),
+		bucket:      b,
+		decoderFunc: JSONDecoder,
+		backoff:     time.Millisecond,
+	}
+	err = s.loadNextObject()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "decode first")
+}
+
+func TestModtimeStream_LoadNextObject_SkipOffsetExceedsBlob(t *testing.T) {
+	dir := t.TempDir()
+	t1 := time.Unix(1000, 0).UTC()
+	p := filepath.Join(dir, "obj")
+	require.NoError(t, os.WriteFile(p, []byte(`{"id":1}{"id":2}`), 0o644))
+	require.NoError(t, os.Chtimes(p, t1, t1))
+
+	b, err := blob.OpenBucket(t.Context(), "file:///"+dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, b.Close()) })
+
+	s := &modtimeStream{
+		ctx:         t.Context(),
+		bucket:      b,
+		decoderFunc: JSONDecoder,
+		backoff:     time.Millisecond,
+		cursor:      modtimeCursor{Key: "obj", ModTime: t1, Offset: 10},
+	}
+	require.NoError(t, s.loadNextObject())
+	require.True(t, s.blobEOF)
+}
+
+func TestModtimeStream_LoadNextObject_SkipRecordError(t *testing.T) {
+	dir := t.TempDir()
+	t1 := time.Unix(1000, 0).UTC()
+	p := filepath.Join(dir, "obj")
+	require.NoError(t, os.WriteFile(p, []byte(`{}`), 0o644))
+	require.NoError(t, os.Chtimes(p, t1, t1))
+
+	b, err := blob.OpenBucket(t.Context(), "file:///"+dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, b.Close()) })
+
+	skipErr := errors.New("skip failed")
+	s := &modtimeStream{
+		ctx:    t.Context(),
+		bucket: b,
+		decoderFunc: func(r io.Reader) (Decoder, error) {
+			return &errDecoder{err: skipErr}, nil
+		},
+		backoff: time.Millisecond,
+		cursor:  modtimeCursor{Key: "obj", ModTime: t1, Offset: 1},
+	}
+	jtest.Require(t, skipErr, s.loadNextObject())
+}
+
+func TestModtimeStream_Recv_DecodeErrorClosesReader(t *testing.T) {
+	dir := t.TempDir()
+	t1 := time.Unix(1000, 0).UTC()
+	p := filepath.Join(dir, "obj")
+	require.NoError(t, os.WriteFile(p, []byte(`{}`), 0o644))
+	require.NoError(t, os.Chtimes(p, t1, t1))
+
+	b, err := blob.OpenBucket(t.Context(), "file:///"+dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, b.Close()) })
+
+	r, err := b.NewReader(t.Context(), "obj", nil)
+	require.NoError(t, err)
+
+	decodeErr := errors.New("mid-stream decode error")
+	s := &modtimeStream{
+		ctx:     t.Context(),
+		bucket:  b,
+		backoff: time.Millisecond,
+		reader:  r,
+		decoder: &errDecoder{err: decodeErr},
+		next:    []byte(`{}`),
+		cursor:  modtimeCursor{Key: "obj", ModTime: t1},
+	}
+
+	_, err = s.Recv()
+	jtest.Require(t, decodeErr, err)
+
+	// Subsequent call returns the stored error.
+	_, err = s.Recv()
+	jtest.Require(t, decodeErr, err)
 }
