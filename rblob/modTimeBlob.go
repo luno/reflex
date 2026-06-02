@@ -186,11 +186,11 @@ func parseModTimeCursor(s string) (modtimeCursor, error) {
 	}
 	ns, err := strconv.ParseInt(nanoStr, 10, 64)
 	if err != nil {
-		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadUnixNano, "", j.MKV{"cursor": s, "ns": ns})
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadUnixNano, "", j.MKV{"cursor": s, "nanoStr": nanoStr})
 	}
 	offset, err := strconv.ParseInt(tail, 10, 64)
 	if err != nil {
-		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadOffset, "", j.MKV{"cursor": s, "offset": offset})
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadOffset, "", j.MKV{"cursor": s, "tail": tail})
 	}
 	return modtimeCursor{
 		Key:     key,
