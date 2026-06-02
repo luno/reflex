@@ -24,13 +24,6 @@ import (
 // the last modified list objects to determine its resume position.
 // --------------------------------------------------------------------------------------------
 
-var (
-	errModTimeCursorMissingSeparator = errors.New("invalid modtime cursor: missing separator")
-	errModTimeCursorEmptyKey         = errors.New("invalid modtime cursor: empty key")
-	errModTimeCursorBadUnixNano      = errors.New("invalid modtime cursor: bad unix-nano")
-	errModTimeCursorBadOffset        = errors.New("invalid modtime cursor: bad offset")
-)
-
 // WithModTimeBackoff configures the backoff duration between polls when no new
 // objects are found. Defaults to one minute.
 func WithModTimeBackoff(d time.Duration) BucketOption[ModTimeBucket] {
@@ -166,9 +159,6 @@ func (c modtimeCursor) String() string {
 // where modtime_unix_nano is a Unix timestamp in nanoseconds and offset is the
 // number of records already consumed from this blob.
 //
-// The legacy two-part format <key>|<modtime_unix_nano> is also accepted and
-// returns a cursor with Offset 0.
-//
 // An empty string returns an empty modtimeCursor and no error.
 // An error is returned if the cursor format is invalid or fields cannot be parsed.
 func parseModTimeCursor(s string) (modtimeCursor, error) {
@@ -178,7 +168,7 @@ func parseModTimeCursor(s string) (modtimeCursor, error) {
 
 	lastSep := strings.LastIndex(s, "|")
 	if lastSep < 0 {
-		return modtimeCursor{}, errors.Wrap(errModTimeCursorMissingSeparator, "")
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorMissingSeparator, "", j.MKV{"cursor": s, "lastSep": lastSep})
 	}
 
 	tail := s[lastSep+1:]
@@ -186,21 +176,21 @@ func parseModTimeCursor(s string) (modtimeCursor, error) {
 
 	secondSep := strings.LastIndex(prefix, "|")
 	if secondSep < 0 {
-		return modtimeCursor{}, errors.Wrap(errModTimeCursorMissingSeparator, "")
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorMissingSeparator, "", j.MKV{"cursor": s, "secondSep": secondSep, "prefix": prefix})
 	}
 
 	key := prefix[:secondSep]
 	nanoStr := prefix[secondSep+1:]
 	if key == "" {
-		return modtimeCursor{}, errors.Wrap(errModTimeCursorEmptyKey, "")
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorEmptyKey, "", j.MKV{"cursor": s, "nanoStr": nanoStr})
 	}
 	ns, err := strconv.ParseInt(nanoStr, 10, 64)
 	if err != nil {
-		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadUnixNano, "")
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadUnixNano, "", j.MKV{"cursor": s, "nanoStr": nanoStr})
 	}
 	offset, err := strconv.ParseInt(tail, 10, 64)
 	if err != nil {
-		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadOffset, "")
+		return modtimeCursor{}, errors.Wrap(errModTimeCursorBadOffset, "", j.MKV{"cursor": s, "tail": tail})
 	}
 	return modtimeCursor{
 		Key:     key,
