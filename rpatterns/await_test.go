@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -111,6 +112,48 @@ func TestAwait(t *testing.T) {
 		})
 	}
 }
+
+// TestAwaitPollerCancellation verifies that Await's poller goroutine responds
+// to context cancellation instead of blocking on a bare time.Sleep. Under
+// testing/synctest, a goroutine parked in a real sleep can never wake once the
+// bubble's root goroutine returns (the fake clock stops advancing), so this
+// test panics with "deadlock: main bubble goroutine has exited but blocked
+// goroutines remain" if the poller's sleep isn't select'd against ctx.Done().
+func TestAwaitPollerCancellation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		polled := make(chan struct{})
+		pollFn := func() (bool, error) {
+			select {
+			case <-polled:
+			default:
+				close(polled)
+			}
+			return false, nil
+		}
+		stream := func(context.Context, string, ...reflex.StreamOption) (reflex.StreamClient, error) {
+			return recvFunc(func() (*reflex.Event, error) {
+				// Hold the listener until the poller has polled once and is
+				// parked in its select, so Await's deferred cancel (not a
+				// found result) is what wakes the poller.
+				<-polled
+				return &reflex.Event{
+					ID:        "1",
+					Type:      testEventType(1),
+					ForeignID: "1",
+				}, nil
+			}), nil
+		}
+
+		err := rpatterns.Await(context.Background(), stream, pollFn,
+			"1", testEventType(1))
+
+		assert.NoError(t, err)
+	})
+}
+
+type recvFunc func() (*reflex.Event, error)
+
+func (f recvFunc) Recv() (*reflex.Event, error) { return f() }
 
 type poller struct {
 	results []bool
