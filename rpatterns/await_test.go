@@ -121,21 +121,39 @@ func TestAwait(t *testing.T) {
 // goroutines remain" if the poller's sleep isn't select'd against ctx.Done().
 func TestAwaitPollerCancellation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		s := &streamer{
-			events: []int{1},
-			err:    context.DeadlineExceeded,
+		polled := make(chan struct{})
+		pollFn := func() (bool, error) {
+			select {
+			case <-polled:
+			default:
+				close(polled)
+			}
+			return false, nil
 		}
-		p := &poller{
-			results: []bool{false, false, false, false, false},
-			err:     sql.ErrNoRows,
+		stream := func(context.Context, string, ...reflex.StreamOption) (reflex.StreamClient, error) {
+			return recvFunc(func() (*reflex.Event, error) {
+				// Hold the listener until the poller has polled once and is
+				// parked in its select, so Await's deferred cancel (not a
+				// found result) is what wakes the poller.
+				<-polled
+				return &reflex.Event{
+					ID:        "1",
+					Type:      testEventType(1),
+					ForeignID: "1",
+				}, nil
+			}), nil
 		}
 
-		err := rpatterns.Await(context.Background(), s.Stream, p.poll,
-			strconv.Itoa(1), testEventType(1))
+		err := rpatterns.Await(context.Background(), stream, pollFn,
+			"1", testEventType(1))
 
 		assert.NoError(t, err)
 	})
 }
+
+type recvFunc func() (*reflex.Event, error)
+
+func (f recvFunc) Recv() (*reflex.Event, error) { return f() }
 
 type poller struct {
 	results []bool
