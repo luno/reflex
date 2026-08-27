@@ -59,7 +59,11 @@ func Await(
 			} else if found {
 				return nil
 			}
-			time.Sleep(time.Second)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
 		}
 	}
 
