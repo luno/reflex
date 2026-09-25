@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.2
-	github.com/go-sql-driver/mysql v1.10.0
+	github.com/go-sql-driver/mysql v1.10.1
 	github.com/luno/jettison v0.0.0-20260604094545-6727dacc9313
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
